@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grade Report — Coding I</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <div class="grades-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo">
+        <div class="logo-icon">🐍</div>
+        <h1>Coding <span>I</span> — Grade Report</h1>
+      </div>
+      <nav class="header-nav">
+        <button class="btn-nav" onclick="window.location.href='index.html'">← Activities</button>
+        <button class="btn-nav active">Grade Report</button>
+      </nav>
+    </header>
+
+    <!-- Toolbar -->
+    <div class="card" style="padding: 16px 20px;">
+      <div class="grades-toolbar">
+        <input type="text" id="search-input" placeholder="🔍 Search student name..." oninput="filterTable()" style="flex:1; min-width:160px;" />
+        <select id="unit-filter" onchange="filterTable()">
+          <option value="">All Units</option>
+          <option value="1">Unit 1: Intro</option>
+          <option value="2">Unit 2: Variables</option>
+          <option value="3">Unit 3: Conditionals</option>
+          <option value="4">Unit 4: Loops</option>
+          <option value="5">Unit 5: Functions</option>
+          <option value="6">Unit 6: Debugging</option>
+          <option value="7">Unit 7: Projects</option>
+        </select>
+        <select id="view-mode" onchange="renderGrades()">
+          <option value="table">Detailed Table</option>
+          <option value="cards">Student Cards</option>
+        </select>
+        <button class="btn-export" onclick="exportCSV()">Export CSV</button>
+        <button class="btn-danger" onclick="confirmClearAll()">Clear All</button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div id="stats-bar"></div>
+
+    <!-- Grade Content -->
+    <div id="grades-content">
+      <div class="loading">Loading grades...</div>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Modal -->
+  <div id="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center;">
+    <div id="modal-box" style="background:white; border-radius:12px; padding:28px; max-width:400px; width:90%; box-shadow: 0 25px 50px rgba(0,0,0,0.25);">
+      <h3 id="modal-title" style="font-size:1.1rem; font-weight:700; margin-bottom:12px;"></h3>
+      <p id="modal-body" style="color:#6b7280; margin-bottom:24px; line-height:1.6;"></p>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button onclick="closeModal()" style="padding:9px 18px; border:2px solid #e5e7eb; border-radius:8px; background:white; cursor:pointer; font-weight:600;">Cancel</button>
+        <button id="modal-confirm" style="padding:9px 18px; border:none; border-radius:8px; background:#dc2626; color:white; cursor:pointer; font-weight:600;" onclick="">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/grades.js"></script>
+  <script>
+
+    let allRows = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderStatsBar();
+      renderGrades();
+    });
+
+    function renderStatsBar() {
+      const students = getAllStudents();
+      const statsBar = document.getElementById('stats-bar');
+
+      if (students.length === 0) {
+        statsBar.innerHTML = '';
+        return;
+      }
+
+      let totalSessions = 0;
+      let grandScore = 0, grandPossible = 0;
+      const averages = [];
+
+      students.forEach(name => {
+        const s = getStudentSummary(name);
+        if (s.pct !== null) {
+          averages.push(s.pct);
+          grandScore += s.totalScore;
+          grandPossible += s.totalPossible;
+          totalSessions += s.sessions;
+        }
+      });
+
+      const classAvg = grandPossible > 0 ? Math.round((grandScore / grandPossible) * 100) : 0;
+
+      statsBar.innerHTML = `
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px;">
+          <div class="card" style="padding:16px; text-align:center;">
+            <div style="font-size:1.8rem; font-weight:800; color:var(--primary);">${students.length}</div>
+            <div style="font-size:0.8rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.05em; margin-top:4px;">Students</div>
+          </div>
+          <div class="card" style="padding:16px; text-align:center;">
+            <div style="font-size:1.8rem; font-weight:800; color:var(--primary);">${totalSessions}</div>
+            <div style="font-size:0.8rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.05em; margin-top:4px;">Total Sessions</div>
+          </div>
+          <div class="card" style="padding:16px; text-align:center;">
+            <div style="font-size:1.8rem; font-weight:800; color:var(--primary);">${classAvg}%</div>
+            <div style="font-size:0.8rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.05em; margin-top:4px;">Class Average</div>
+          </div>
+          <div class="card" style="padding:16px; text-align:center;">
+            <div style="font-size:1.8rem; font-weight:800; color:var(--primary);">${getLetterGrade(classAvg)}</div>
+            <div style="font-size:0.8rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.05em; margin-top:4px;">Class Grade</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderGrades() {
+      const mode = document.getElementById('view-mode').value;
+      const students = getAllStudents();
+      const content = document.getElementById('grades-content');
+
+      if (students.length === 0) {
+        content.innerHTML = `
+          <div class="card">
+            <div class="no-data">
+              <div class="no-data-icon">📋</div>
+              <p>No grades recorded yet. Have students complete activities to see results here.</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      if (mode === 'cards') {
+        renderStudentCards(students, content);
+      } else {
+        renderDetailedTable(students, content);
+      }
+    }
+
+    function renderStudentCards(students, container) {
+      const cards = students.map(name => {
+        const s = getStudentSummary(name);
+        const grades = getStudentGrades(name);
+        const daysCompleted = Object.keys(grades).length;
+        const gradeClass = getGradeClass(s.pct);
+        const letter = getLetterGrade(s.pct);
+
+        return `
+          <div class="student-card" onclick="viewStudent('${name.replace(/'/g, "\\'")}')">
+            <div class="s-name">${escapeHtml(name)}</div>
+            <div class="s-stats">${daysCompleted} day${daysCompleted !== 1 ? 's' : ''} completed · ${s.sessions} activities</div>
+            <div class="s-avg">${s.pct !== null ? s.pct + '%' : '—'} <span class="grade-pill ${gradeClass}" style="font-size:0.85rem;">${letter}</span></div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = `<div class="student-cards">${cards}</div>`;
+    }
+
+    function renderDetailedTable(students, container) {
+      // Build all rows
+      allRows = [];
+
+      students.forEach(name => {
+        const grades = getStudentGrades(name);
+        Object.keys(grades).sort((a, b) => Number(a) - Number(b)).forEach(day => {
+          const d = grades[day];
+          const lesson = getLesson(Number(day));
+          const unit = lesson ? lesson.unit : 0;
+          const title = lesson ? lesson.title : 'Unknown';
+
+          const br = d.bellRinger ? { s: d.bellRinger.score, t: 1 } : null;
+          const pr = d.practice ? { s: d.practice.score, t: d.practice.total } : null;
+          const et = d.exitTicket ? { s: d.exitTicket.score, t: 1 } : null;
+
+          let totalScore = 0, totalPossible = 0;
+          [br, pr, et].forEach(x => { if (x) { totalScore += x.s; totalPossible += x.t; } });
+          const pct = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : null;
+
+          const timestamps = ['bellRinger','practice','exitTicket']
+            .filter(p => d[p] && d[p].timestamp)
+            .map(p => d[p].timestamp);
+          const dateStr = timestamps.length > 0
+            ? new Date(timestamps[timestamps.length - 1]).toLocaleDateString()
+            : '—';
+
+          allRows.push({ name, day: Number(day), unit, title, br, pr, et, pct, dateStr });
+        });
+      });
+
+      filterTable();
+    }
+
+    function filterTable() {
+      const search = (document.getElementById('search-input').value || '').toLowerCase();
+      const unitFilter = document.getElementById('unit-filter').value;
+
+      const filtered = allRows.filter(row => {
+        const matchName = row.name.toLowerCase().includes(search);
+        const matchUnit = !unitFilter || String(row.unit) === unitFilter;
+        return matchName && matchUnit;
+      });
+
+      renderTable(filtered);
+    }
+
+    function renderTable(rows) {
+      const container = document.getElementById('grades-content');
+
+      if (rows.length === 0) {
+        container.innerHTML = `
+          <div class="card">
+            <div class="no-data">
+              <div class="no-data-icon">🔍</div>
+              <p>No records match your search.</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const tbody = rows.map(row => {
+        const brStr = row.br ? `${row.br.s}/${row.br.t}` : '—';
+        const prStr = row.pr ? `${row.pr.s}/${row.pr.t}` : '—';
+        const etStr = row.et ? `${row.et.s}/${row.et.t}` : '—';
+        const pctStr = row.pct !== null ? `${row.pct}%` : '—';
+        const letter = getLetterGrade(row.pct);
+        const gradeClass = getGradeClass(row.pct);
+
+        const brPct = row.br ? (row.br.s / row.br.t * 100) : null;
+        const prPct = row.pr ? Math.round(row.pr.s / row.pr.t * 100) : null;
+        const etPct = row.et ? (row.et.s / row.et.t * 100) : null;
+
+        return `
+          <tr>
+            <td><strong>${escapeHtml(row.name)}</strong></td>
+            <td>Day ${row.day}</td>
+            <td><span style="font-size:0.75rem; color:var(--gray-500);">Unit ${row.unit}</span><br>${escapeHtml(row.title)}</td>
+            <td><span class="grade-pill ${getGradeClass(brPct)}">${brStr}</span></td>
+            <td><span class="grade-pill ${getGradeClass(prPct)}">${prStr}</span></td>
+            <td><span class="grade-pill ${getGradeClass(etPct)}">${etStr}</span></td>
+            <td>
+              <strong>${pctStr}</strong>
+              <span class="grade-pill ${gradeClass}" style="margin-left:4px;">${letter}</span>
+            </td>
+            <td style="color:var(--gray-400); font-size:0.8rem;">${row.dateStr}</td>
+            <td>
+              <button onclick="deleteEntry('${escapeAttrHTML(row.name)}', ${row.day})"
+                style="background:none; border:none; cursor:pointer; color:var(--gray-400); font-size:1.1rem;" title="Delete">🗑️</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('grades-content').innerHTML = `
+        <div class="grades-table-wrap">
+          <table class="grades-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Day</th>
+                <th>Lesson</th>
+                <th>🔔 Bell Ringer</th>
+                <th>✏️ Practice</th>
+                <th>🚪 Exit Ticket</th>
+                <th>Overall</th>
+                <th>Date</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function viewStudent(name) {
+      // Switch to table view filtered by student
+      document.getElementById('view-mode').value = 'table';
+      document.getElementById('search-input').value = name;
+      renderGrades();
+      filterTable();
+    }
+
+    function exportCSV() {
+      const csv = exportGradesCSV();
+      if (!csv) {
+        showToast('No grades to export.');
+        return;
+      }
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `coding1_grades_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Grades exported!');
+    }
+
+    function deleteEntry(name, day) {
+      showModal(
+        'Delete Entry?',
+        `Remove ${name}'s Day ${day} grades? This cannot be undone.`,
+        () => {
+          const all = loadAllGrades();
+          if (all[name] && all[name][day]) {
+            delete all[name][day];
+            if (Object.keys(all[name]).length === 0) delete all[name];
+            saveAllGrades(all);
+          }
+          renderStatsBar();
+          renderGrades();
+          showToast('Entry deleted.');
+        }
+      );
+    }
+
+    function confirmClearAll() {
+      showModal(
+        'Clear ALL Grades?',
+        'This will permanently delete ALL student grades from this device. Are you sure?',
+        () => {
+          deleteAllGrades();
+          allRows = [];
+          renderStatsBar();
+          renderGrades();
+          showToast('All grades cleared.');
+        }
+      );
+    }
+
+    function showModal(title, body, onConfirm) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').textContent = body;
+      document.getElementById('modal-confirm').onclick = () => { closeModal(); onConfirm(); };
+      document.getElementById('modal-overlay').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').style.display = 'none';
+    }
+
+    function showToast(message) {
+      let toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function escapeHtml(text) {
+      return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function escapeAttrHTML(text) {
+      return String(text).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+    }
+
+  </script>
+
+</body>
+</html>
