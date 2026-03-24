@@ -85,20 +85,27 @@ function renderWaitingScreen() {
 
   app.innerHTML = `
     <div class="waiting-screen">
-      <div class="card" style="text-align:center; padding: 60px 28px;">
-        <div class="waiting-emoji">🐍</div>
-        <h2 style="font-size:1.8rem; font-weight:800; color:var(--gray-800); margin-bottom:12px;">
-          Today's Activities
-        </h2>
-        <p style="font-size:1.1rem; color:var(--gray-600); margin-bottom:8px;">
-          Aren't open yet — check back soon!
-        </p>
-        <p style="font-size:0.875rem; color:var(--gray-400); margin-bottom:32px;">
-          Your teacher will activate today's lesson when class begins.
-        </p>
-        <div class="waiting-indicator">
-          <div class="live-dot"></div>
-          <span style="font-size:0.85rem; color:var(--gray-500);">Waiting for teacher…</span>
+      <div class="card setup-card">
+        <!-- Same banner style as setup card -->
+        <div class="setup-banner">
+          <div class="waiting-emoji setup-banner-emoji">🐍</div>
+          <h2 class="setup-banner-title">Coding I</h2>
+          <p class="setup-banner-sub">Daily Activities</p>
+        </div>
+        <div class="setup-body">
+          <h3 style="font-size:1.35rem; font-weight:800; color:var(--gray-800); margin-bottom:10px;">
+            Not open yet!
+          </h3>
+          <p style="font-size:1rem; color:var(--gray-500); margin-bottom:6px;">
+            Your teacher will activate today's lesson when class begins.
+          </p>
+          <p style="font-size:0.85rem; color:var(--gray-400); margin-bottom:28px;">
+            This page will update automatically — no need to refresh.
+          </p>
+          <div class="waiting-indicator">
+            <div class="live-dot"></div>
+            <span style="font-size:0.85rem; color:var(--gray-500);">Waiting for teacher…</span>
+          </div>
         </div>
       </div>
     </div>
@@ -142,35 +149,43 @@ function renderSetupScreen(activeDay) {
 
   app.innerHTML = `
     <div class="setup-screen">
-      <div class="card" style="text-align:center; padding: 40px 28px;">
-        <div style="font-size: 3rem; margin-bottom: 12px;">🐍</div>
-        <h2 style="font-size:1.6rem; font-weight:800; color:var(--gray-800); margin-bottom:8px;">
-          Coding I — Daily Activities
-        </h2>
-        <p style="color:var(--gray-500); margin-bottom:${lesson ? '0' : '28px'}">
-          Bell Ringer · Practice Problems · Exit Ticket
-        </p>
+      <div class="card setup-card">
 
-        ${activeDayBlock}
-
-        <div class="setup-grid" style="max-width:${firebaseEnabled ? '340px' : '500px'}; margin: 0 auto;">
-          <div class="form-group">
-            <label for="student-name-input">Your Name</label>
-            <input type="text" id="student-name-input" placeholder="First Last" autocomplete="off" />
-          </div>
-          ${daySelectorBlock}
+        <!-- Colourful banner at top of card -->
+        <div class="setup-banner">
+          <div class="setup-banner-emoji">🐍</div>
+          <h2 class="setup-banner-title">Coding I</h2>
+          <p class="setup-banner-sub">Daily Activities</p>
         </div>
 
-        <button class="btn-primary" id="start-btn"
-                style="max-width: 300px; margin: 24px auto 0;">
-          Start Today's Activities
-        </button>
+        <!-- Form body -->
+        <div class="setup-body">
+          <p style="color:var(--gray-400); font-size:0.85rem; margin-bottom:24px; letter-spacing:.03em;">
+            BELL RINGER &nbsp;·&nbsp; PRACTICE &nbsp;·&nbsp; EXIT TICKET
+          </p>
 
-        <p style="margin-top:16px; font-size:0.8rem; color:var(--gray-400);">
-          ${firebaseEnabled
-            ? 'Your scores are saved to your teacher\'s gradebook.'
-            : 'Your grades are saved automatically to this device.'}
-        </p>
+          ${activeDayBlock}
+
+          <div style="max-width:340px; margin:0 auto; display:flex; flex-direction:column; gap:16px;">
+            <div class="form-group">
+              <label for="student-name-input">Your Name</label>
+              <input type="text" id="student-name-input" placeholder="First Last" autocomplete="off" />
+            </div>
+            ${daySelectorBlock}
+          </div>
+
+          <button class="btn-primary" id="start-btn"
+                  style="max-width:340px; margin:24px auto 0;">
+            Start Today's Activities
+          </button>
+
+          <p style="margin-top:16px; font-size:0.78rem; color:var(--gray-300);">
+            ${firebaseEnabled
+              ? '🔒 Scores saved to your teacher\'s gradebook'
+              : '💾 Grades saved automatically to this device'}
+          </p>
+        </div>
+
       </div>
     </div>
   `;

@@ -33,7 +33,11 @@
 
 body {
   font-family: var(--font);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background:
+    radial-gradient(ellipse 70% 55% at 15%  12%, rgba(99, 102, 241, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 65% at 88%  85%, rgba(139, 92, 246, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 75%  20%, rgba(79, 70, 229, 0.15)  0%, transparent 45%),
+    linear-gradient(160deg, #0f172a 0%, #1e1b4b 45%, #2d1f6e 100%);
   min-height: 100vh;
   color: var(--gray-900);
 }
@@ -47,11 +51,14 @@ body {
 
 /* ============ HEADER ============ */
 .app-header {
-  background: white;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: var(--radius);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   padding: 20px 28px;
   margin-bottom: 20px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -155,6 +162,62 @@ body {
   gap: 20px;
 }
 
+/* Modern card with no top padding (banner fills it) */
+.setup-card {
+  padding: 0 !important;
+  overflow: hidden;
+  text-align: center;
+}
+
+/* Gradient banner at top of setup card */
+.setup-banner {
+  background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+  padding: 36px 28px 28px;
+  text-align: center;
+  position: relative;
+}
+
+.setup-banner::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: white;
+  border-radius: 20px 20px 0 0;
+}
+
+.setup-banner-emoji {
+  font-size: 3.2rem;
+  display: block;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+}
+
+.setup-banner-title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: white;
+  margin-bottom: 4px;
+  letter-spacing: -.02em;
+}
+
+.setup-banner-sub {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.75);
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Body area below banner */
+.setup-body {
+  padding: 28px 28px 36px;
+  text-align: center;
+}
+
+/* Legacy grid (kept for any fallback usage) */
 .setup-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -883,9 +946,6 @@ body {
 
 /* ============ WAITING SCREEN ============ */
 .waiting-emoji {
-  font-size: 4rem;
-  margin-bottom: 20px;
-  display: block;
   animation: waiting-bounce 2s ease-in-out infinite;
 }
 
