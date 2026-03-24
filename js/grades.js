@@ -34,6 +34,7 @@ function saveAllGrades(data) {
 }
 
 function saveSessionGrade(studentName, day, phase, score, total) {
+  // ── localStorage (always) ──────────────────────────────────
   const all = loadAllGrades();
   if (!all[studentName]) all[studentName] = {};
   if (!all[studentName][day]) all[studentName][day] = {};
@@ -43,6 +44,11 @@ function saveSessionGrade(studentName, day, phase, score, total) {
     timestamp: new Date().toISOString()
   };
   saveAllGrades(all);
+
+  // ── Firebase (when configured) ─────────────────────────────
+  if (typeof saveGradeToFirebase === 'function') {
+    saveGradeToFirebase(studentName, day, phase, score, total);
+  }
 }
 
 function getStudentGrades(studentName) {

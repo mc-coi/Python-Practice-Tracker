@@ -2,13 +2,13 @@
 // Main Application Logic — Coding I Daily Activities
 // ============================================================
 
-// App State
+// ── App State ─────────────────────────────────────────────────
 let state = {
   studentName: '',
   currentDay: 1,
-  currentPhase: 'bell', // 'bell' | 'practice' | 'exit' | 'complete'
+  currentPhase: 'bell',   // 'bell' | 'practice' | 'exit' | 'complete'
   bellAnswered: false,
-  practiceAnswered: [],   // array of booleans
+  practiceAnswered: [],
   exitAnswered: false,
   bellScore: 0,
   practiceScore: 0,
@@ -17,26 +17,190 @@ let state = {
   lesson: null
 };
 
+// ── Screen State ─────────────────────────────────────────────
+// 'loading' | 'waiting' | 'setup' | 'session'
+let screenState = 'loading';
+let lastActiveDayData = null;   // last snapshot from Firestore
+let firebaseEnabled = false;    // true once Firebase initialises
+
 // ============================================================
 // Initialization
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-  populateDaySelector();
-  renderSetupScreen();
   setupNavigation();
+
+  firebaseEnabled = initFirebase();   // from firebase-db.js
+
+  if (firebaseEnabled) {
+    // Watch Firestore for the teacher's active-day setting.
+    // The callback fires immediately with the current value,
+    // then again every time the teacher makes a change.
+    watchActiveDayChanges((data) => {
+      lastActiveDayData = data;
+      handleActiveDayChange(data);
+    });
+  } else {
+    // No Firebase configured → classic local-only mode
+    screenState = 'setup';
+    renderSetupScreen(null);
+  }
 });
 
+// ── React to teacher activating / deactivating a day ─────────
+function handleActiveDayChange(data) {
+  // Never interrupt a student mid-session
+  if (screenState === 'session') return;
+
+  if (data && data.isActive && data.activeDay) {
+    // A day is now active
+    if (screenState !== 'setup') {
+      screenState = 'setup';
+      renderSetupScreen(data.activeDay);
+    }
+  } else {
+    // No active day
+    if (screenState !== 'waiting') {
+      screenState = 'waiting';
+      renderWaitingScreen();
+    }
+  }
+}
+
+// ── Navigation ────────────────────────────────────────────────
 function setupNavigation() {
   document.querySelectorAll('.btn-nav').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.target;
-      if (target === 'grades') {
-        window.location.href = 'grades.html';
-      }
+      if (target === 'grades') window.location.href = 'grades.html';
     });
   });
 }
 
+// ============================================================
+// Waiting Screen  (shown when teacher hasn't activated a day)
+// ============================================================
+function renderWaitingScreen() {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  app.innerHTML = `
+    <div class="waiting-screen">
+      <div class="card" style="text-align:center; padding: 60px 28px;">
+        <div class="waiting-emoji">🐍</div>
+        <h2 style="font-size:1.8rem; font-weight:800; color:var(--gray-800); margin-bottom:12px;">
+          Today's Activities
+        </h2>
+        <p style="font-size:1.1rem; color:var(--gray-600); margin-bottom:8px;">
+          Aren't open yet — check back soon!
+        </p>
+        <p style="font-size:0.875rem; color:var(--gray-400); margin-bottom:32px;">
+          Your teacher will activate today's lesson when class begins.
+        </p>
+        <div class="waiting-indicator">
+          <div class="live-dot"></div>
+          <span style="font-size:0.85rem; color:var(--gray-500);">Waiting for teacher…</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// Setup Screen
+// ============================================================
+function renderSetupScreen(activeDay) {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  const lesson = activeDay ? getLesson(activeDay) : null;
+
+  // Build the "Today's Lesson" info block (Firebase mode only)
+  const activeDayBlock = (lesson && firebaseEnabled) ? `
+    <div class="active-day-info">
+      <div class="active-day-badge">
+        <span class="live-dot" style="background:var(--success);"></span>
+        <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase;
+                     letter-spacing:.07em; color:var(--success);">Active</span>
+      </div>
+      <div style="font-size:0.8rem; color:var(--gray-400); font-weight:600;
+                  text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">
+        Day ${activeDay} · Unit ${lesson.unit}: ${lesson.unitName}
+      </div>
+      <div style="font-size:1.05rem; font-weight:700; color:var(--gray-800);">
+        ${lesson.title}
+      </div>
+    </div>
+  ` : '';
+
+  // Day selector (local-only mode only)
+  const daySelectorBlock = !firebaseEnabled ? `
+    <div class="form-group">
+      <label for="day-select">Today's Lesson</label>
+      <select id="day-select"></select>
+    </div>
+  ` : '';
+
+  app.innerHTML = `
+    <div class="setup-screen">
+      <div class="card" style="text-align:center; padding: 40px 28px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">🐍</div>
+        <h2 style="font-size:1.6rem; font-weight:800; color:var(--gray-800); margin-bottom:8px;">
+          Coding I — Daily Activities
+        </h2>
+        <p style="color:var(--gray-500); margin-bottom:${lesson ? '0' : '28px'}">
+          Bell Ringer · Practice Problems · Exit Ticket
+        </p>
+
+        ${activeDayBlock}
+
+        <div class="setup-grid" style="max-width:${firebaseEnabled ? '340px' : '500px'}; margin: 0 auto;">
+          <div class="form-group">
+            <label for="student-name-input">Your Name</label>
+            <input type="text" id="student-name-input" placeholder="First Last" autocomplete="off" />
+          </div>
+          ${daySelectorBlock}
+        </div>
+
+        <button class="btn-primary" id="start-btn"
+                style="max-width: 300px; margin: 24px auto 0;">
+          Start Today's Activities
+        </button>
+
+        <p style="margin-top:16px; font-size:0.8rem; color:var(--gray-400);">
+          ${firebaseEnabled
+            ? 'Your scores are saved to your teacher\'s gradebook.'
+            : 'Your grades are saved automatically to this device.'}
+        </p>
+      </div>
+    </div>
+  `;
+
+  if (!firebaseEnabled) {
+    populateDaySelector();
+  }
+
+  // Pre-fill last used name
+  const lastName = localStorage.getItem('cs_last_student');
+  if (lastName) {
+    const input = document.getElementById('student-name-input');
+    if (input) input.value = lastName;
+  }
+
+  // Attach start button handler
+  const startBtn = document.getElementById('start-btn');
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      const day = firebaseEnabled
+        ? activeDay
+        : parseInt(document.getElementById('day-select')?.value || '1');
+      startSession(day);
+    });
+  }
+}
+
+// ============================================================
+// Day Selector (local-only mode)
+// ============================================================
 function populateDaySelector() {
   const sel = document.getElementById('day-select');
   if (!sel) return;
@@ -63,64 +227,17 @@ function populateDaySelector() {
 }
 
 // ============================================================
-// Setup Screen
+// Start Session
 // ============================================================
-function renderSetupScreen() {
-  const app = document.getElementById('app');
-  if (!app) return;
-
-  app.innerHTML = `
-    <div class="setup-screen">
-      <div class="card" style="text-align:center; padding: 40px 28px;">
-        <div style="font-size: 3rem; margin-bottom: 12px;">🐍</div>
-        <h2 style="font-size:1.6rem; font-weight:800; color: var(--gray-800); margin-bottom:8px;">
-          Coding I — Daily Activities
-        </h2>
-        <p style="color: var(--gray-500); margin-bottom: 28px;">
-          Bell Ringer · Practice Problems · Exit Ticket
-        </p>
-
-        <div class="setup-grid" style="max-width:500px; margin: 0 auto;">
-          <div class="form-group">
-            <label for="student-name-input">Your Name</label>
-            <input type="text" id="student-name-input" placeholder="First Last" autocomplete="off" />
-          </div>
-          <div class="form-group">
-            <label for="day-select">Today's Lesson</label>
-            <select id="day-select"></select>
-          </div>
-        </div>
-
-        <button class="btn-primary" id="start-btn" style="max-width: 300px; margin: 24px auto 0;" onclick="startSession()">
-          Start Today's Activities
-        </button>
-
-        <p style="margin-top:16px; font-size:0.8rem; color: var(--gray-400);">
-          Your grades are saved automatically to this device.
-        </p>
-      </div>
-    </div>
-  `;
-
-  populateDaySelector();
-
-  // Check for previously used name
-  const lastStudent = localStorage.getItem('cs_last_student');
-  if (lastStudent) {
-    document.getElementById('student-name-input').value = lastStudent;
-  }
-}
-
-function startSession() {
+function startSession(day) {
   const nameInput = document.getElementById('student-name-input');
-  const daySelect = document.getElementById('day-select');
-
   const name = nameInput ? nameInput.value.trim() : '';
-  const day = daySelect ? parseInt(daySelect.value) : 1;
 
   if (!name) {
-    nameInput.focus();
-    nameInput.style.borderColor = 'var(--error)';
+    if (nameInput) {
+      nameInput.focus();
+      nameInput.style.borderColor = 'var(--error)';
+    }
     showToast('Please enter your name to start!');
     return;
   }
@@ -131,8 +248,8 @@ function startSession() {
     return;
   }
 
-  // Save name for next time
   localStorage.setItem('cs_last_student', name);
+  screenState = 'session';
 
   // Reset state
   state = {
@@ -160,7 +277,6 @@ function startSession() {
 function renderLessonHeader() {
   const app = document.getElementById('app');
   const { lesson, studentName } = state;
-  const unitInfo = UNIT_COLORS[lesson.unit];
 
   app.innerHTML = `
     <div class="lesson-header">
@@ -210,7 +326,6 @@ function updateProgress() {
 }
 
 function switchTab(phase) {
-  // Only allow switching to unlocked phases
   if (phase === 'practice' && !state.bellAnswered) {
     showToast('Complete the Bell Ringer first!');
     return;
@@ -223,9 +338,9 @@ function switchTab(phase) {
   state.currentPhase = phase;
   updateTabs();
 
-  if (phase === 'bell') renderBellRingerContent();
+  if (phase === 'bell')     renderBellRingerContent();
   else if (phase === 'practice') renderPracticeContent();
-  else if (phase === 'exit') renderExitTicketContent();
+  else if (phase === 'exit')     renderExitTicketContent();
 }
 
 function updateTabs() {
@@ -245,7 +360,7 @@ function updateTabs() {
       tab.classList.add('');
     } else if (
       (phase === 'practice' && !bellAnswered) ||
-      (phase === 'exit' && !allPractice)
+      (phase === 'exit'     && !allPractice)
     ) {
       tab.classList.add('locked');
     }
@@ -284,8 +399,9 @@ function renderBellRingerContent() {
     </div>
 
     <div class="action-bar">
-      ${!bellAnswered ? `<button class="btn-submit" id="submit-bell" onclick="submitBell()" disabled>Submit Answer</button>` : ''}
-      ${bellAnswered ? `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>` : ''}
+      ${!bellAnswered
+        ? `<button class="btn-submit" id="submit-bell" onclick="submitBell()" disabled>Submit Answer</button>`
+        : `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`}
     </div>
   `;
 
@@ -295,28 +411,37 @@ function renderBellRingerContent() {
 }
 
 function getUserAnswer(phase, index) {
-  return localStorage.getItem(`cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}`) || null;
+  return localStorage.getItem(
+    `cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}`
+  ) || null;
 }
 
 function saveUserAnswer(phase, index, answer) {
-  localStorage.setItem(`cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}`, answer);
+  localStorage.setItem(
+    `cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}`,
+    answer
+  );
 }
 
 function renderOptions(q, phase, index, disabled) {
   if (q.type === 'true_false') {
     return `
       <div class="tf-options">
-        <button class="tf-btn" data-answer="True" onclick="selectAnswer(this, '${phase}', ${index}, '${escapeAttr(q.correct)}')" ${disabled ? 'disabled' : ''}>True</button>
-        <button class="tf-btn" data-answer="False" onclick="selectAnswer(this, '${phase}', ${index}, '${escapeAttr(q.correct)}')" ${disabled ? 'disabled' : ''}>False</button>
+        <button class="tf-btn" data-answer="True"
+          onclick="selectAnswer(this, '${phase}', ${index}, '${escapeAttr(q.correct)}')"
+          ${disabled ? 'disabled' : ''}>True</button>
+        <button class="tf-btn" data-answer="False"
+          onclick="selectAnswer(this, '${phase}', ${index}, '${escapeAttr(q.correct)}')"
+          ${disabled ? 'disabled' : ''}>False</button>
       </div>
     `;
   }
 
   return `
     <div class="options-list">
-      ${q.options.map((opt, i) => {
+      ${q.options.map((opt) => {
         const letter = opt.charAt(0);
-        const text = opt.substring(3);
+        const text   = opt.substring(3);
         return `
           <button class="option-btn" data-answer="${letter}"
             onclick="selectAnswer(this, '${phase}', ${index}, '${escapeAttr(q.correct)}')"
@@ -335,9 +460,7 @@ function escapeAttr(str) {
 }
 
 function formatQuestion(text) {
-  // Convert code blocks (text after a blank line that looks like code)
   return text.replace(/\n\n([\s\S]+?)(?=\n\n|$)/g, (match, code) => {
-    // Detect if it looks like code (has indentation, print, def, etc.)
     if (/^\s*(print|def|for|while|if|else|elif|import|#|[a-z_]+ =)/.test(code)) {
       return `<div class="code-block">${escapeHtml(code.trim())}</div>`;
     }
@@ -347,7 +470,7 @@ function formatQuestion(text) {
 
 function formatOptionText(text) {
   if (text.includes('print(') || text.includes('def ') || text.includes('= ') || text.includes('\\n')) {
-    return `<code style="font-family: var(--mono); font-size: 0.85em; white-space: pre-wrap;">${escapeHtml(text)}</code>`;
+    return `<code style="font-family:var(--mono);font-size:0.85em;white-space:pre-wrap;">${escapeHtml(text)}</code>`;
   }
   return escapeHtml(text);
 }
@@ -357,30 +480,23 @@ function escapeHtml(text) {
 }
 
 function selectAnswer(btn, phase, index, correctAnswer) {
-  // Don't allow if already answered
   if (btn.disabled) return;
 
-  // For true/false
   const isTF = btn.classList.contains('tf-btn');
   const container = btn.closest(isTF ? '.tf-options' : '.options-list');
-
-  // Deselect previous selection
   container.querySelectorAll(isTF ? '.tf-btn' : '.option-btn').forEach(b => b.classList.remove('selected'));
-
-  // Select this one
   btn.classList.add('selected');
   btn.dataset.selected = 'true';
 
-  // Enable submit if on an un-answered question
   if (phase === 'bell') {
-    const submitBtn = document.getElementById('submit-bell');
-    if (submitBtn) submitBtn.disabled = false;
+    const sub = document.getElementById('submit-bell');
+    if (sub) sub.disabled = false;
   } else if (phase === 'practice') {
-    const submitBtn = document.getElementById(`submit-p${index}`);
-    if (submitBtn) submitBtn.disabled = false;
+    const sub = document.getElementById(`submit-p${index}`);
+    if (sub) sub.disabled = false;
   } else if (phase === 'exit') {
-    const submitBtn = document.getElementById('submit-exit');
-    if (submitBtn) submitBtn.disabled = false;
+    const sub = document.getElementById('submit-exit');
+    if (sub) sub.disabled = false;
   }
 }
 
@@ -389,10 +505,10 @@ function submitBell() {
   const selectedBtn = document.querySelector('.tf-btn.selected, .option-btn.selected');
   if (!selectedBtn) return;
 
-  const answer = selectedBtn.dataset.answer;
+  const answer  = selectedBtn.dataset.answer;
   const correct = answer === q.correct;
 
-  state.bellScore = correct ? 1 : 0;
+  state.bellScore    = correct ? 1 : 0;
   state.bellAnswered = true;
   saveUserAnswer('bell', 0, answer);
   saveSessionGrade(state.studentName, state.currentDay, 'bellRinger', state.bellScore, 1);
@@ -400,24 +516,19 @@ function submitBell() {
 
   lockOptions('bell', 0, q.correct, answer);
 
-  // Show feedback
   const feedbackEl = document.getElementById('feedback-bell');
   if (feedbackEl) {
     feedbackEl.className = `feedback-box ${correct ? 'correct' : 'incorrect'} show`;
     feedbackEl.innerHTML = `<span class="feedback-icon">${correct ? '✓ Correct!' : '✗ Incorrect.'}</span> ${q.explanation}`;
   }
 
-  // Swap submit for next button
   const actionBar = document.querySelector('.action-bar');
   if (actionBar) {
     actionBar.innerHTML = `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`;
   }
 
-  // Update card styling
   const card = document.querySelector('.question-card');
-  if (card) {
-    card.className = `question-card ${correct ? 'correct' : 'incorrect'}`;
-  }
+  if (card) card.className = `question-card ${correct ? 'correct' : 'incorrect'}`;
 
   updateTabs();
 }
@@ -425,21 +536,15 @@ function submitBell() {
 function lockOptions(phase, index, correctAnswer, userAnswer) {
   const isTF = document.querySelector('.tf-options');
   const btnClass = isTF ? '.tf-btn' : '.option-btn';
-  const btns = document.querySelectorAll(btnClass);
-
-  btns.forEach(btn => {
+  document.querySelectorAll(btnClass).forEach(btn => {
     btn.disabled = true;
     const ans = btn.dataset.answer;
     if (ans === correctAnswer) {
       btn.classList.add('correct-answer');
-      if (btn.querySelector('.option-letter')) {
-        btn.querySelector('.option-letter').textContent = '✓';
-      }
+      if (btn.querySelector('.option-letter')) btn.querySelector('.option-letter').textContent = '✓';
     } else if (ans === userAnswer && ans !== correctAnswer) {
       btn.classList.add('wrong-answer');
-      if (btn.querySelector('.option-letter')) {
-        btn.querySelector('.option-letter').textContent = '✗';
-      }
+      if (btn.querySelector('.option-letter')) btn.querySelector('.option-letter').textContent = '✗';
     }
   });
 }
@@ -461,9 +566,9 @@ function renderPracticeContent() {
   const problems = lesson.practice;
 
   phaseContent.innerHTML = `
-    <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-      <span style="font-weight: 700; color: var(--gray-600);">Practice Problems</span>
-      <span style="font-size:0.8rem; color: var(--gray-400);">${problems.length} questions — answer all to unlock Exit Ticket</span>
+    <div style="margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span style="font-weight:700; color:var(--gray-600);">Practice Problems</span>
+      <span style="font-size:0.8rem; color:var(--gray-400);">${problems.length} questions — answer all to unlock Exit Ticket</span>
       <span class="badge badge-practice" style="margin-left:auto;">${practiceAnswered.filter(Boolean).length}/${problems.length} answered</span>
     </div>
 
@@ -472,7 +577,7 @@ function renderPracticeContent() {
     <div class="action-bar" id="practice-action-bar">
       ${practiceAnswered.every(Boolean)
         ? `<button class="btn-next show" onclick="goToExit()">Proceed to Exit Ticket →</button>`
-        : `<p style="color: var(--gray-400); font-size: 0.875rem; margin: auto 0;">Answer all questions to continue</p>`
+        : `<p style="color:var(--gray-400);font-size:0.875rem;margin:auto 0;">Answer all questions to continue</p>`
       }
     </div>
   `;
@@ -480,12 +585,11 @@ function renderPracticeContent() {
 
 function renderPracticeCard(problem, index) {
   const answered = state.practiceAnswered[index];
-  const userAns = getUserAnswer('practice', index);
+  const userAns  = getUserAnswer('practice', index);
 
   let cardClass = 'question-card';
   if (answered) {
-    const correct = userAns === problem.correct;
-    cardClass += correct ? ' correct' : ' incorrect';
+    cardClass += (userAns === problem.correct) ? ' correct' : ' incorrect';
   } else {
     cardClass += ' active';
   }
@@ -505,7 +609,7 @@ function renderPracticeCard(problem, index) {
         ${answered ? problem.explanation : ''}
       </div>
       ${!answered
-        ? `<div class="action-bar" style="margin-top: 12px; justify-content: flex-end;">
+        ? `<div class="action-bar" style="margin-top:12px;justify-content:flex-end;">
              <button class="btn-submit" id="submit-p${index}" onclick="submitPractice(${index})" disabled>Submit</button>
            </div>`
         : ''
@@ -516,9 +620,8 @@ function renderPracticeCard(problem, index) {
 
 function submitPractice(index) {
   const problem = state.lesson.practice[index];
-  const card = document.getElementById(`practice-card-${index}`);
+  const card    = document.getElementById(`practice-card-${index}`);
 
-  // Find selected answer
   const isTF = card.querySelector('.tf-options');
   const selectedBtn = isTF
     ? card.querySelector('.tf-btn.selected')
@@ -526,32 +629,27 @@ function submitPractice(index) {
 
   if (!selectedBtn) return;
 
-  const answer = selectedBtn.dataset.answer;
+  const answer  = selectedBtn.dataset.answer;
   const correct = answer === problem.correct;
 
-  // Update state
   state.practiceAnswered[index] = true;
   if (correct) state.practiceScore++;
   saveUserAnswer('practice', index, answer);
 
-  // Check if all practice answered
   if (state.practiceAnswered.every(Boolean)) {
     saveSessionGrade(state.studentName, state.currentDay, 'practice', state.practiceScore, state.practiceTotal);
   }
 
   updateProgress();
 
-  // Update card
   card.className = `question-card ${correct ? 'correct' : 'incorrect'}`;
 
-  // Show feedback
   const feedbackEl = document.getElementById(`feedback-p${index}`);
   if (feedbackEl) {
     feedbackEl.className = `feedback-box ${correct ? 'correct' : 'incorrect'} show`;
     feedbackEl.innerHTML = `<span class="feedback-icon">${correct ? '✓ Correct!' : '✗ Incorrect.'}</span> ${problem.explanation}`;
   }
 
-  // Lock all options in this card
   const allBtns = isTF
     ? card.querySelectorAll('.tf-btn')
     : card.querySelectorAll('.option-btn');
@@ -568,17 +666,14 @@ function submitPractice(index) {
     }
   });
 
-  // Remove submit button from this card
   const submitArea = card.querySelector('.action-bar');
   if (submitArea) submitArea.remove();
 
-  // Update counter badge and action bar
   const countBadge = document.querySelector('.badge-practice');
   if (countBadge) {
     countBadge.textContent = `${state.practiceAnswered.filter(Boolean).length}/${state.lesson.practice.length} answered`;
   }
 
-  // Show proceed button if all done
   if (state.practiceAnswered.every(Boolean)) {
     const actionBar = document.getElementById('practice-action-bar');
     if (actionBar) {
@@ -636,10 +731,10 @@ function submitExit() {
   const selectedBtn = document.querySelector('.tf-btn.selected, .option-btn.selected');
   if (!selectedBtn) return;
 
-  const answer = selectedBtn.dataset.answer;
+  const answer  = selectedBtn.dataset.answer;
   const correct = answer === q.correct;
 
-  state.exitScore = correct ? 1 : 0;
+  state.exitScore    = correct ? 1 : 0;
   state.exitAnswered = true;
   saveUserAnswer('exit', 0, answer);
   saveSessionGrade(state.studentName, state.currentDay, 'exitTicket', state.exitScore, 1);
@@ -669,28 +764,23 @@ function showSessionSummary() {
   const phaseContent = document.getElementById('phase-content');
   if (!phaseContent) return;
 
-  // Remove tabs
   const tabsEl = document.getElementById('phase-tabs');
   if (tabsEl) tabsEl.style.display = 'none';
 
-  const { bellScore, practiceScore, practiceTotal, exitScore, lesson, studentName } = state;
+  const { bellScore, practiceScore, practiceTotal, exitScore, lesson } = state;
 
-  const totalScore = bellScore + practiceScore + exitScore;
+  const totalScore    = bellScore + practiceScore + exitScore;
   const totalPossible = 1 + practiceTotal + 1;
-  const pct = Math.round((totalScore / totalPossible) * 100);
-  const letter = getLetterGrade(pct);
-  const circleClass = getScoreCircleClass(pct);
-  const feedback = getFeedbackMessage(pct);
+  const pct           = Math.round((totalScore / totalPossible) * 100);
+  const letter        = getLetterGrade(pct);
+  const circleClass   = getScoreCircleClass(pct);
+  const feedback      = getFeedbackMessage(pct);
 
   const brPct = bellScore === 1 ? 100 : 0;
   const prPct = practiceTotal > 0 ? Math.round((practiceScore / practiceTotal) * 100) : 0;
   const etPct = exitScore === 1 ? 100 : 0;
 
-  // Star display
-  let stars = '';
-  if (pct >= 90) stars = '⭐⭐⭐';
-  else if (pct >= 70) stars = '⭐⭐';
-  else stars = '⭐';
+  let stars = pct >= 90 ? '⭐⭐⭐' : pct >= 70 ? '⭐⭐' : '⭐';
 
   phaseContent.innerHTML = `
     <div class="score-summary">
@@ -727,33 +817,39 @@ function showSessionSummary() {
       </div>
 
       <p class="feedback-message">${feedback}</p>
-
       <hr class="divider">
 
-      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
         <button class="btn-secondary" onclick="startNewSession()">
           New Session
         </button>
-        <button class="btn-primary" style="max-width: 200px;" onclick="window.location.href='grades.html'">
+        <button class="btn-primary" style="max-width:200px;" onclick="window.location.href='grades.html'">
           View Grade Report
         </button>
       </div>
     </div>
   `;
 
-  // Update progress to 100%
   const bar = document.getElementById('progress-bar');
   if (bar) bar.style.width = '100%';
+
+  // Session done — allow active-day listener to change screens again
+  screenState = 'complete';
 }
 
+// ============================================================
+// Start a New Session (after Summary)
+// ============================================================
 function startNewSession() {
-  renderSetupScreen();
-  const header = document.querySelector('.lesson-header');
-  if (header) header.remove();
-  const tabs = document.getElementById('phase-tabs');
-  if (tabs) tabs.remove();
-  // Reset — re-render full setup
-  renderSetupScreen();
+  if (firebaseEnabled && lastActiveDayData) {
+    handleActiveDayChange(lastActiveDayData);
+  } else if (firebaseEnabled) {
+    screenState = 'waiting';
+    renderWaitingScreen();
+  } else {
+    screenState = 'setup';
+    renderSetupScreen(null);
+  }
 }
 
 // ============================================================

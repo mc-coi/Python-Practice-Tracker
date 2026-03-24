@@ -881,6 +881,62 @@ body {
   font-size: 1rem;
 }
 
+/* ============ WAITING SCREEN ============ */
+.waiting-emoji {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  display: block;
+  animation: waiting-bounce 2s ease-in-out infinite;
+}
+
+@keyframes waiting-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+
+.waiting-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gray-50);
+  border: 1.5px solid var(--gray-200);
+  border-radius: 20px;
+  padding: 8px 18px;
+  margin-top: 8px;
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  display: inline-block;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ============ ACTIVE DAY INFO (setup screen) ============ */
+.active-day-info {
+  background: var(--primary-light);
+  border: 2px solid var(--primary);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 20px auto 24px;
+  max-width: 440px;
+  text-align: left;
+}
+
+.active-day-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
 /* ============ MISC ============ */
 .hidden { display: none !important; }
 
