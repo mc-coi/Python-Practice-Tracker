@@ -12,7 +12,7 @@ let firebaseReady = false;
 function initFirebase() {
   try {
     if (
-      !window.FIREBASE_CONFIG ||
+      typeof FIREBASE_CONFIG === 'undefined' ||
       FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY_HERE'
     ) {
       console.info('[Firebase] No config found — running in local-only mode.');
