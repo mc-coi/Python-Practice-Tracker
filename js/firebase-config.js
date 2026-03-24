@@ -5,14 +5,23 @@
 //         See FIREBASE_SETUP.md for a step-by-step walkthrough.
 // ============================================================
 
-const FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY_HERE",
-  authDomain:        "your-project-id.firebaseapp.com",
-  projectId:         "your-project-id",
-  storageBucket:     "your-project-id.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID_HERE",
-  appId:             "YOUR_APP_ID_HERE"
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBkcvyadSPk5DzZl54VdXfvNgQVSK64mAc",
+  authDomain: "coding-1-activities.firebaseapp.com",
+  projectId: "coding-1-activities",
+  storageBucket: "coding-1-activities.firebasestorage.app",
+  messagingSenderId: "980092953911",
+  appId: "1:980092953911:web:270d6828df016cc4aca6b2"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
 // ── How the app behaves ────────────────────────────────────
 // • If FIREBASE_CONFIG still has "YOUR_API_KEY_HERE",
