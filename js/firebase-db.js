@@ -68,18 +68,42 @@ function watchActiveDayChanges(callback) {
 
 /**
  * Teacher: set which day is active (or deactivate).
+ * When activating, all three sections default to open.
  */
 async function setActiveDayInFirebase(day, isActive) {
   if (!firebaseReady) return false;
   try {
-    await _db.collection('settings').doc('classroom').set({
+    const data = {
       activeDay: day,
       isActive:  isActive,
       setAt:     firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    // Default all sections to open when activating a day
+    if (isActive) {
+      data.sections = { bell: true, practice: true, exit: true };
+    }
+    await _db.collection('settings').doc('classroom').set(data);
     return true;
   } catch (e) {
     console.error('[Firebase] setActiveDay error:', e);
+    return false;
+  }
+}
+
+/**
+ * Teacher: open or lock a single section (bell / practice / exit).
+ */
+async function setSectionInFirebase(section, isOpen) {
+  if (!firebaseReady) return false;
+  try {
+    const update = {
+      setAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    update[`sections.${section}`] = isOpen;
+    await _db.collection('settings').doc('classroom').update(update);
+    return true;
+  } catch (e) {
+    console.error('[Firebase] setSectionInFirebase error:', e);
     return false;
   }
 }

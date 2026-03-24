@@ -258,6 +258,67 @@
       transition: all .2s;
     }
 
+    /* ── Section toggles ─────────────────────────── */
+    .section-toggles {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 2px solid var(--gray-100);
+    }
+
+    .section-toggles-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--gray-400);
+      margin-bottom: 12px;
+    }
+
+    .section-toggle-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .section-toggle-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: 2px solid var(--gray-200);
+      background: white;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      font-family: var(--font);
+    }
+
+    .section-toggle-btn .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--gray-300);
+      transition: background .2s;
+    }
+
+    .section-toggle-btn.is-open {
+      border-color: var(--success);
+      background: var(--success-light);
+      color: #15803d;
+    }
+
+    .section-toggle-btn.is-open .dot { background: var(--success); }
+
+    .section-toggle-btn.is-locked {
+      border-color: #fca5a5;
+      background: var(--error-light);
+      color: var(--error);
+    }
+
+    .section-toggle-btn.is-locked .dot { background: var(--error); }
+
     .btn-signout:hover {
       border-color: var(--error);
       color: var(--error);
@@ -354,6 +415,23 @@
 
         <div id="current-lesson-info" style="display:none;" class="current-lesson-info"></div>
         <div id="set-at-label" class="set-at"></div>
+
+        <!-- Section locks (visible only when a day is active) -->
+        <div class="section-toggles" id="section-toggles" style="display:none;">
+          <div class="section-toggles-label">Open / lock sections</div>
+          <div class="section-toggle-row">
+            <button class="section-toggle-btn" id="toggle-bell"     onclick="toggleSection('bell')">
+              <span class="dot"></span> 🔔 Bell Ringer
+            </button>
+            <button class="section-toggle-btn" id="toggle-practice" onclick="toggleSection('practice')">
+              <span class="dot"></span> ✏️ Practice
+            </button>
+            <button class="section-toggle-btn" id="toggle-exit"     onclick="toggleSection('exit')">
+              <span class="dot"></span> 🚪 Exit Ticket
+            </button>
+          </div>
+        </div>
+
       </div>
 
       <!-- Live Grades -->
@@ -512,6 +590,27 @@
     }
   }
 
+  // ── Section Toggles ────────────────────────────────────────
+  async function toggleSection(section) {
+    if (!currentActiveDayData || !currentActiveDayData.isActive) return;
+
+    const current = currentActiveDayData.sections
+      ? currentActiveDayData.sections[section] !== false
+      : true;
+    const newState = !current;
+
+    const btn = document.getElementById(`toggle-${section}`);
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+
+    await setSectionInFirebase(section, newState);
+    // updateControlPanel will fire via the onSnapshot listener
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+
+    const label = section === 'bell' ? 'Bell Ringer'
+                : section === 'practice' ? 'Practice' : 'Exit Ticket';
+    showToast(`${label} ${newState ? 'unlocked ✓' : 'locked 🔒'}`);
+  }
+
   // ── Activate / Deactivate ──────────────────────────────────
   async function activateDay() {
     const sel = document.getElementById('teacher-day-select');
@@ -551,12 +650,13 @@
 
   // ── Control Panel UI ────────────────────────────────────────
   function updateControlPanel(data) {
-    const statusBadge = document.getElementById('status-badge');
-    const infoBox     = document.getElementById('current-lesson-info');
-    const setAtLabel  = document.getElementById('set-at-label');
-    const btnActivate   = document.getElementById('btn-activate');
-    const btnDeactivate = document.getElementById('btn-deactivate');
-    const sel           = document.getElementById('teacher-day-select');
+    const statusBadge     = document.getElementById('status-badge');
+    const infoBox         = document.getElementById('current-lesson-info');
+    const setAtLabel      = document.getElementById('set-at-label');
+    const btnActivate     = document.getElementById('btn-activate');
+    const btnDeactivate   = document.getElementById('btn-deactivate');
+    const sectionToggles  = document.getElementById('section-toggles');
+    const sel             = document.getElementById('teacher-day-select');
 
     if (data && data.isActive && data.activeDay) {
       const lesson = getLesson(data.activeDay);
@@ -574,8 +674,17 @@
 
       btnActivate.style.display   = 'none';
       btnDeactivate.style.display = 'inline-block';
+      sectionToggles.style.display = 'block';
 
-      // Sync selector to active day
+      // Update section toggle buttons
+      const sections = data.sections || { bell: true, practice: true, exit: true };
+      ['bell', 'practice', 'exit'].forEach(s => {
+        const btn = document.getElementById(`toggle-${s}`);
+        if (!btn) return;
+        const isOpen = sections[s] !== false;
+        btn.className = `section-toggle-btn ${isOpen ? 'is-open' : 'is-locked'}`;
+      });
+
       if (sel) sel.value = data.activeDay;
 
       if (data.setAt) {
@@ -586,9 +695,10 @@
       statusBadge.className = 'status-badge status-inactive';
       statusBadge.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;"></span> Inactive`;
 
-      infoBox.style.display = 'none';
-      btnActivate.style.display   = 'inline-block';
-      btnDeactivate.style.display = 'none';
+      infoBox.style.display        = 'none';
+      sectionToggles.style.display = 'none';
+      btnActivate.style.display    = 'inline-block';
+      btnDeactivate.style.display  = 'none';
 
       if (data && data.setAt) {
         const d = data.setAt.toDate ? data.setAt.toDate() : new Date(data.setAt);

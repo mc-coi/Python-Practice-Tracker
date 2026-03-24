@@ -389,6 +389,33 @@ body {
   cursor: not-allowed;
 }
 
+/* Teacher has explicitly locked this section */
+.phase-tab.teacher-locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--error);
+}
+
+/* "Waiting for teacher" message in action bars */
+.teacher-wait {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--warning);
+  background: var(--warning-light);
+  border: 1.5px solid #fcd34d;
+  border-radius: 10px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: teacher-wait-pulse 2s ease-in-out infinite;
+}
+
+@keyframes teacher-wait-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+
 /* ============ QUESTIONS ============ */
 .question-card {
   background: white;

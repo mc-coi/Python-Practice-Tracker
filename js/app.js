@@ -48,21 +48,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── React to teacher activating / deactivating a day ─────────
 function handleActiveDayChange(data) {
-  // Never interrupt a student mid-session
-  if (screenState === 'session') return;
+  if (screenState === 'session') {
+    // Mid-session: just refresh tabs + action bars in real time
+    updateTabs();
+    refreshActionBars();
+    return;
+  }
 
   if (data && data.isActive && data.activeDay) {
-    // A day is now active
     if (screenState !== 'setup') {
       screenState = 'setup';
       renderSetupScreen(data.activeDay);
     }
   } else {
-    // No active day
     if (screenState !== 'waiting') {
       screenState = 'waiting';
       renderWaitingScreen();
     }
+  }
+}
+
+// ── Read section locks from latest Firebase snapshot ─────────
+function getSectionLocks() {
+  if (!lastActiveDayData || !lastActiveDayData.sections) {
+    return { bell: true, practice: true, exit: true };
+  }
+  const s = lastActiveDayData.sections;
+  return {
+    bell:     s.bell     !== false,
+    practice: s.practice !== false,
+    exit:     s.exit     !== false
+  };
+}
+
+// ── Refresh "next section" action bars after a lock change ────
+function refreshActionBars() {
+  const locks = getSectionLocks();
+  const phase = state.currentPhase;
+
+  if (phase === 'bell' && state.bellAnswered) {
+    const bar = document.querySelector('#phase-content .action-bar');
+    if (bar) bar.innerHTML = locks.practice
+      ? `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`
+      : `<div class="teacher-wait">⏳ Waiting for teacher to open Practice…</div>`;
+  }
+
+  if (phase === 'practice' && state.practiceAnswered.every(Boolean)) {
+    const bar = document.getElementById('practice-action-bar');
+    if (bar) bar.innerHTML = locks.exit
+      ? `<button class="btn-next show" onclick="goToExit()">Proceed to Exit Ticket →</button>`
+      : `<div class="teacher-wait">⏳ Waiting for teacher to open Exit Ticket…</div>`;
   }
 }
 
@@ -341,6 +376,14 @@ function updateProgress() {
 }
 
 function switchTab(phase) {
+  const locks = getSectionLocks();
+
+  // Teacher lock takes priority
+  if (phase === 'bell'     && !locks.bell)     { showToast('Bell Ringer is locked by your teacher.'); return; }
+  if (phase === 'practice' && !locks.practice) { showToast('Practice is locked by your teacher.'); return; }
+  if (phase === 'exit'     && !locks.exit)     { showToast('Exit Ticket is locked by your teacher.'); return; }
+
+  // Progression check
   if (phase === 'practice' && !state.bellAnswered) {
     showToast('Complete the Bell Ringer first!');
     return;
@@ -353,31 +396,38 @@ function switchTab(phase) {
   state.currentPhase = phase;
   updateTabs();
 
-  if (phase === 'bell')     renderBellRingerContent();
+  if (phase === 'bell')          renderBellRingerContent();
   else if (phase === 'practice') renderPracticeContent();
   else if (phase === 'exit')     renderExitTicketContent();
 }
 
 function updateTabs() {
+  const locks = getSectionLocks();
   const { bellAnswered, practiceAnswered, currentPhase } = state;
   const allPractice = practiceAnswered.every(Boolean);
+
+  const ICONS = { bell: '🔔', practice: '✏️', exit: '🚪' };
 
   ['bell', 'practice', 'exit'].forEach(phase => {
     const tab = document.getElementById(`tab-${phase}`);
     if (!tab) return;
     tab.className = 'phase-tab';
 
+    const teacherLocked = !locks[phase];
+    const icon = tab.querySelector('.tab-icon');
+    if (icon) icon.textContent = teacherLocked ? '🔒' : ICONS[phase];
+
     if (phase === currentPhase) {
       tab.classList.add('active');
-    } else if (phase === 'practice' && bellAnswered) {
-      tab.classList.add(allPractice ? 'completed' : '');
-    } else if (phase === 'exit' && allPractice) {
-      tab.classList.add('');
+    } else if (teacherLocked) {
+      tab.classList.add('teacher-locked');
     } else if (
       (phase === 'practice' && !bellAnswered) ||
       (phase === 'exit'     && !allPractice)
     ) {
       tab.classList.add('locked');
+    } else if (phase === 'practice' && allPractice) {
+      tab.classList.add('completed');
     }
   });
 }
@@ -416,7 +466,9 @@ function renderBellRingerContent() {
     <div class="action-bar">
       ${!bellAnswered
         ? `<button class="btn-submit" id="submit-bell" onclick="submitBell()" disabled>Submit Answer</button>`
-        : `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`}
+        : getSectionLocks().practice
+          ? `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`
+          : `<div class="teacher-wait">⏳ Waiting for teacher to open Practice…</div>`}
     </div>
   `;
 
@@ -539,7 +591,9 @@ function submitBell() {
 
   const actionBar = document.querySelector('.action-bar');
   if (actionBar) {
-    actionBar.innerHTML = `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`;
+    actionBar.innerHTML = getSectionLocks().practice
+      ? `<button class="btn-next show" onclick="goToPractice()">Start Practice Problems →</button>`
+      : `<div class="teacher-wait">⏳ Waiting for teacher to open Practice…</div>`;
   }
 
   const card = document.querySelector('.question-card');
@@ -591,7 +645,9 @@ function renderPracticeContent() {
 
     <div class="action-bar" id="practice-action-bar">
       ${practiceAnswered.every(Boolean)
-        ? `<button class="btn-next show" onclick="goToExit()">Proceed to Exit Ticket →</button>`
+        ? getSectionLocks().exit
+          ? `<button class="btn-next show" onclick="goToExit()">Proceed to Exit Ticket →</button>`
+          : `<div class="teacher-wait">⏳ Waiting for teacher to open Exit Ticket…</div>`
         : `<p style="color:var(--gray-400);font-size:0.875rem;margin:auto 0;">Answer all questions to continue</p>`
       }
     </div>
@@ -692,7 +748,9 @@ function submitPractice(index) {
   if (state.practiceAnswered.every(Boolean)) {
     const actionBar = document.getElementById('practice-action-bar');
     if (actionBar) {
-      actionBar.innerHTML = `<button class="btn-next show" onclick="goToExit()">Proceed to Exit Ticket →</button>`;
+      actionBar.innerHTML = getSectionLocks().exit
+        ? `<button class="btn-next show" onclick="goToExit()">Proceed to Exit Ticket →</button>`
+        : `<div class="teacher-wait">⏳ Waiting for teacher to open Exit Ticket…</div>`;
     }
     updateTabs();
   }
