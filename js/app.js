@@ -1,12 +1,26 @@
 // ============================================================
-// Main Application Logic — Coding I Daily Activities
+// Main Application Logic — 3-Class Daily Activities
+// Classes: Coding I (🐍) | Coding II (💻) | Videogame Design (🎮)
+//
+// Key design: the TEACHER controls which sections are open.
+//             Students have NO forced progression gates.
 // ============================================================
+
+// ── Class Configuration ───────────────────────────────────────
+const CLASS_CONFIG = {
+  coding1:   { display: 'Coding I',         icon: '🐍', bodyClass: 'class-coding1'   },
+  coding2:   { display: 'Coding II',        icon: '💻', bodyClass: 'class-coding2'   },
+  videogame: { display: 'Videogame Design', icon: '🎮', bodyClass: 'class-videogame' }
+};
+
+// ── Current Class ─────────────────────────────────────────────
+let currentClass = localStorage.getItem('mc_selected_class') || 'coding1';
 
 // ── App State ─────────────────────────────────────────────────
 let state = {
   studentName: '',
   currentDay: 1,
-  currentPhase: 'bell',   // 'bell' | 'practice' | 'exit' | 'complete'
+  currentPhase: 'bell',
   bellAnswered: false,
   practiceAnswered: [],
   exitAnswered: false,
@@ -18,38 +32,88 @@ let state = {
 };
 
 // ── Screen State ─────────────────────────────────────────────
-// 'loading' | 'waiting' | 'setup' | 'session'
+// 'loading' | 'waiting' | 'setup' | 'session' | 'complete'
 let screenState = 'loading';
-let lastActiveDayData = null;   // last snapshot from Firestore
-let firebaseEnabled = false;    // true once Firebase initialises
+let lastActiveDayData  = null;
+let firebaseEnabled    = false;
+let _unsubscribeActiveDay = null;   // Firebase listener cleanup
+
+// ── Lesson / Day helpers ──────────────────────────────────────
+
+function getLesson(day) {
+  if (currentClass === 'coding2')   return getLessonC2(day);
+  if (currentClass === 'videogame') return getLessonVGD(day);
+  return LESSONS[day] || null;   // coding1
+}
+
+function getTotalDays() {
+  if (currentClass === 'coding2')   return TOTAL_DAYS_C2;
+  if (currentClass === 'videogame') return TOTAL_DAYS_VGD;
+  return TOTAL_DAYS;             // coding1
+}
 
 // ============================================================
 // Initialization
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-  setupNavigation();
+  applyBodyClass();
 
   firebaseEnabled = initFirebase();   // from firebase-db.js
 
+  _subscribeToActiveDay();
+});
+
+function _subscribeToActiveDay() {
+  // Tear down any prior listener before subscribing
+  if (_unsubscribeActiveDay) { _unsubscribeActiveDay(); _unsubscribeActiveDay = null; }
+
   if (firebaseEnabled) {
-    // Watch Firestore for the teacher's active-day setting.
-    // The callback fires immediately with the current value,
-    // then again every time the teacher makes a change.
-    watchActiveDayChanges((data) => {
+    _unsubscribeActiveDay = watchActiveDayChanges((data) => {
       lastActiveDayData = data;
       handleActiveDayChange(data);
-    });
+    }, currentClass);
   } else {
-    // No Firebase configured → classic local-only mode
     screenState = 'setup';
     renderSetupScreen(null);
   }
-});
+}
+
+// ── Class Switching ───────────────────────────────────────────
+function switchClass(cls) {
+  if (cls === currentClass) return;
+
+  if (screenState === 'session') {
+    showToast('Finish your current session before switching classes.');
+    return;
+  }
+
+  currentClass = cls;
+  localStorage.setItem('mc_selected_class', cls);
+  lastActiveDayData = null;
+  screenState = 'loading';
+
+  applyBodyClass();
+  updateClassSwitcherUI();
+
+  // Re-subscribe Firebase listener for new class
+  _subscribeToActiveDay();
+}
+
+function applyBodyClass() {
+  document.body.classList.remove('class-coding1', 'class-coding2', 'class-videogame');
+  document.body.classList.add(CLASS_CONFIG[currentClass].bodyClass);
+}
+
+function updateClassSwitcherUI() {
+  Object.keys(CLASS_CONFIG).forEach(cls => {
+    const btn = document.getElementById(`cls-btn-${cls}`);
+    if (btn) btn.classList.toggle('active', cls === currentClass);
+  });
+}
 
 // ── React to teacher activating / deactivating a day ─────────
 function handleActiveDayChange(data) {
   if (screenState === 'session') {
-    // Mid-session: just refresh tabs + action bars in real time
     updateTabs();
     refreshActionBars();
     return;
@@ -101,30 +165,20 @@ function refreshActionBars() {
   }
 }
 
-// ── Navigation ────────────────────────────────────────────────
-function setupNavigation() {
-  document.querySelectorAll('.btn-nav').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.target;
-      if (target === 'grades') window.location.href = 'grades.html';
-    });
-  });
-}
-
 // ============================================================
-// Waiting Screen  (shown when teacher hasn't activated a day)
+// Waiting Screen
 // ============================================================
 function renderWaitingScreen() {
   const app = document.getElementById('app');
   if (!app) return;
+  const cfg = CLASS_CONFIG[currentClass];
 
   app.innerHTML = `
     <div class="waiting-screen">
       <div class="card setup-card">
-        <!-- Same banner style as setup card -->
         <div class="setup-banner">
-          <div class="waiting-emoji setup-banner-emoji">🐍</div>
-          <h2 class="setup-banner-title">Coding I</h2>
+          <div class="waiting-emoji setup-banner-emoji">${cfg.icon}</div>
+          <h2 class="setup-banner-title">${cfg.display}</h2>
           <p class="setup-banner-sub">Daily Activities</p>
         </div>
         <div class="setup-body">
@@ -153,10 +207,9 @@ function renderWaitingScreen() {
 function renderSetupScreen(activeDay) {
   const app = document.getElementById('app');
   if (!app) return;
-
+  const cfg    = CLASS_CONFIG[currentClass];
   const lesson = activeDay ? getLesson(activeDay) : null;
 
-  // Build the "Today's Lesson" info block (Firebase mode only)
   const activeDayBlock = (lesson && firebaseEnabled) ? `
     <div class="active-day-info">
       <div class="active-day-badge">
@@ -174,7 +227,6 @@ function renderSetupScreen(activeDay) {
     </div>
   ` : '';
 
-  // Day selector (local-only mode only)
   const daySelectorBlock = !firebaseEnabled ? `
     <div class="form-group">
       <label for="day-select">Today's Lesson</label>
@@ -185,15 +237,11 @@ function renderSetupScreen(activeDay) {
   app.innerHTML = `
     <div class="setup-screen">
       <div class="card setup-card">
-
-        <!-- Colourful banner at top of card -->
         <div class="setup-banner">
-          <div class="setup-banner-emoji">🐍</div>
-          <h2 class="setup-banner-title">Coding I</h2>
+          <div class="setup-banner-emoji">${cfg.icon}</div>
+          <h2 class="setup-banner-title">${cfg.display}</h2>
           <p class="setup-banner-sub">Daily Activities</p>
         </div>
-
-        <!-- Form body -->
         <div class="setup-body">
           <p style="color:var(--gray-400); font-size:0.85rem; margin-bottom:24px; letter-spacing:.03em;">
             BELL RINGER &nbsp;·&nbsp; PRACTICE &nbsp;·&nbsp; EXIT TICKET
@@ -220,7 +268,6 @@ function renderSetupScreen(activeDay) {
               : '💾 Grades saved automatically to this device'}
           </p>
         </div>
-
       </div>
     </div>
   `;
@@ -229,14 +276,12 @@ function renderSetupScreen(activeDay) {
     populateDaySelector();
   }
 
-  // Pre-fill last used name
   const lastName = localStorage.getItem('cs_last_student');
   if (lastName) {
     const input = document.getElementById('student-name-input');
     if (input) input.value = lastName;
   }
 
-  // Attach start button handler
   const startBtn = document.getElementById('start-btn');
   if (startBtn) {
     startBtn.addEventListener('click', () => {
@@ -256,21 +301,21 @@ function populateDaySelector() {
   if (!sel) return;
 
   let currentUnit = 0;
-  let optgroup = null;
+  let optgroup    = null;
 
-  for (let day = 1; day <= TOTAL_DAYS; day++) {
+  for (let day = 1; day <= getTotalDays(); day++) {
     const lesson = getLesson(day);
     if (!lesson) continue;
 
     if (lesson.unit !== currentUnit) {
       currentUnit = lesson.unit;
       optgroup = document.createElement('optgroup');
-      optgroup.label = `Unit ${lesson.unit}: ${UNIT_COLORS[lesson.unit].name}`;
+      optgroup.label = `Unit ${lesson.unit}: ${lesson.unitName}`;
       sel.appendChild(optgroup);
     }
 
     const opt = document.createElement('option');
-    opt.value = day;
+    opt.value       = day;
     opt.textContent = `Day ${day}: ${lesson.title}`;
     optgroup.appendChild(opt);
   }
@@ -301,7 +346,6 @@ function startSession(day) {
   localStorage.setItem('cs_last_student', name);
   screenState = 'session';
 
-  // Reset state
   state = {
     studentName: name,
     currentDay: day,
@@ -343,11 +387,11 @@ function renderLessonHeader() {
         <span class="tab-icon">🔔</span>
         <span class="tab-label">Bell Ringer</span>
       </button>
-      <button class="phase-tab locked" id="tab-practice" onclick="switchTab('practice')">
+      <button class="phase-tab" id="tab-practice" onclick="switchTab('practice')">
         <span class="tab-icon">✏️</span>
         <span class="tab-label">Practice</span>
       </button>
-      <button class="phase-tab locked" id="tab-exit" onclick="switchTab('exit')">
+      <button class="phase-tab" id="tab-exit" onclick="switchTab('exit')">
         <span class="tab-icon">🚪</span>
         <span class="tab-label">Exit Ticket</span>
       </button>
@@ -359,11 +403,11 @@ function renderLessonHeader() {
   updateProgress();
 }
 
-function renderPhaseTabs() {}
+function renderPhaseTabs() {}   // stub — tabs built inside renderLessonHeader
 
 function updateProgress() {
   const { bellAnswered, practiceAnswered, exitAnswered, lesson } = state;
-  let done = 0;
+  let done  = 0;
   const total = 1 + lesson.practice.length + 1;
 
   if (bellAnswered) done += 1;
@@ -375,28 +419,20 @@ function updateProgress() {
   if (bar) bar.style.width = pct + '%';
 }
 
+// ── Tab switching — TEACHER LOCKS ARE THE ONLY GATE ──────────
 function switchTab(phase) {
   const locks = getSectionLocks();
 
-  // Teacher lock takes priority
   if (phase === 'bell'     && !locks.bell)     { showToast('Bell Ringer is locked by your teacher.'); return; }
   if (phase === 'practice' && !locks.practice) { showToast('Practice is locked by your teacher.'); return; }
   if (phase === 'exit'     && !locks.exit)     { showToast('Exit Ticket is locked by your teacher.'); return; }
 
-  // Progression check
-  if (phase === 'practice' && !state.bellAnswered) {
-    showToast('Complete the Bell Ringer first!');
-    return;
-  }
-  if (phase === 'exit' && !state.practiceAnswered.every(Boolean)) {
-    showToast('Complete all Practice Problems first!');
-    return;
-  }
+  // No student-progression gates — only teacher locks matter
 
   state.currentPhase = phase;
   updateTabs();
 
-  if (phase === 'bell')          renderBellRingerContent();
+  if      (phase === 'bell')     renderBellRingerContent();
   else if (phase === 'practice') renderPracticeContent();
   else if (phase === 'exit')     renderExitTicketContent();
 }
@@ -422,13 +458,12 @@ function updateTabs() {
     } else if (teacherLocked) {
       tab.classList.add('teacher-locked');
     } else if (
-      (phase === 'practice' && !bellAnswered) ||
-      (phase === 'exit'     && !allPractice)
+      (phase === 'bell'     && bellAnswered) ||
+      (phase === 'practice' && allPractice)
     ) {
-      tab.classList.add('locked');
-    } else if (phase === 'practice' && allPractice) {
       tab.classList.add('completed');
     }
+    // No 'locked' class for incomplete prior sections — freely accessible
   });
 }
 
@@ -479,13 +514,13 @@ function renderBellRingerContent() {
 
 function getUserAnswer(phase, index) {
   return localStorage.getItem(
-    `cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}`
+    `cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}_${currentClass}`
   ) || null;
 }
 
 function saveUserAnswer(phase, index, answer) {
   localStorage.setItem(
-    `cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}`,
+    `cs_answer_${state.studentName}_${state.currentDay}_${phase}_${index}_${currentClass}`,
     answer
   );
 }
@@ -528,7 +563,7 @@ function escapeAttr(str) {
 
 function formatQuestion(text) {
   return text.replace(/\n\n([\s\S]+?)(?=\n\n|$)/g, (match, code) => {
-    if (/^\s*(print|def|for|while|if|else|elif|import|#|[a-z_]+ =)/.test(code)) {
+    if (/^\s*(print|def|for|while|if|else|elif|import|#|[a-z_]+ =|pygame|class)/.test(code)) {
       return `<div class="code-block">${escapeHtml(code.trim())}</div>`;
     }
     return match;
@@ -536,7 +571,9 @@ function formatQuestion(text) {
 }
 
 function formatOptionText(text) {
-  if (text.includes('print(') || text.includes('def ') || text.includes('= ') || text.includes('\\n')) {
+  if (text.includes('print(') || text.includes('def ') || text.includes('= ') ||
+      text.includes('\\n') || text.includes('pygame') || text.includes('[]') ||
+      text.includes('{}') || text.includes('()')) {
     return `<code style="font-family:var(--mono);font-size:0.85em;white-space:pre-wrap;">${escapeHtml(text)}</code>`;
   }
   return escapeHtml(text);
@@ -578,7 +615,7 @@ function submitBell() {
   state.bellScore    = correct ? 1 : 0;
   state.bellAnswered = true;
   saveUserAnswer('bell', 0, answer);
-  saveSessionGrade(state.studentName, state.currentDay, 'bellRinger', state.bellScore, 1);
+  saveSessionGrade(state.studentName, state.currentDay, 'bellRinger', state.bellScore, 1, currentClass);
   updateProgress();
 
   lockOptions('bell', 0, q.correct, answer);
@@ -637,7 +674,7 @@ function renderPracticeContent() {
   phaseContent.innerHTML = `
     <div style="margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <span style="font-weight:700; color:var(--gray-600);">Practice Problems</span>
-      <span style="font-size:0.8rem; color:var(--gray-400);">${problems.length} questions — answer all to unlock Exit Ticket</span>
+      <span style="font-size:0.8rem; color:var(--gray-400);">${problems.length} questions</span>
       <span class="badge badge-practice" style="margin-left:auto;">${practiceAnswered.filter(Boolean).length}/${problems.length} answered</span>
     </div>
 
@@ -708,7 +745,7 @@ function submitPractice(index) {
   saveUserAnswer('practice', index, answer);
 
   if (state.practiceAnswered.every(Boolean)) {
-    saveSessionGrade(state.studentName, state.currentDay, 'practice', state.practiceScore, state.practiceTotal);
+    saveSessionGrade(state.studentName, state.currentDay, 'practice', state.practiceScore, state.practiceTotal, currentClass);
   }
 
   updateProgress();
@@ -810,7 +847,7 @@ function submitExit() {
   state.exitScore    = correct ? 1 : 0;
   state.exitAnswered = true;
   saveUserAnswer('exit', 0, answer);
-  saveSessionGrade(state.studentName, state.currentDay, 'exitTicket', state.exitScore, 1);
+  saveSessionGrade(state.studentName, state.currentDay, 'exitTicket', state.exitScore, 1, currentClass);
   updateProgress();
 
   lockOptions('exit', 0, q.correct, answer);
@@ -853,7 +890,7 @@ function showSessionSummary() {
   const prPct = practiceTotal > 0 ? Math.round((practiceScore / practiceTotal) * 100) : 0;
   const etPct = exitScore === 1 ? 100 : 0;
 
-  let stars = pct >= 90 ? '⭐⭐⭐' : pct >= 70 ? '⭐⭐' : '⭐';
+  const stars = pct >= 90 ? '⭐⭐⭐' : pct >= 70 ? '⭐⭐' : '⭐';
 
   phaseContent.innerHTML = `
     <div class="score-summary">
@@ -893,9 +930,7 @@ function showSessionSummary() {
       <hr class="divider">
 
       <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn-secondary" onclick="startNewSession()">
-          New Session
-        </button>
+        <button class="btn-secondary" onclick="startNewSession()">New Session</button>
         <button class="btn-primary" style="max-width:200px;" onclick="window.location.href='grades.html'">
           View Grade Report
         </button>
@@ -906,7 +941,6 @@ function showSessionSummary() {
   const bar = document.getElementById('progress-bar');
   if (bar) bar.style.width = '100%';
 
-  // Session done — allow active-day listener to change screens again
   screenState = 'complete';
 }
 

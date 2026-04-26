@@ -1054,3 +1054,173 @@ body {
   .card { padding: 18px; }
   .question-card { padding: 16px; }
 }
+
+/* ============================================================
+   CLASS SWITCHER (header)
+   ============================================================ */
+.class-switcher {
+  display: flex;
+  gap: 4px;
+  background: var(--gray-100);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.cls-btn {
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--gray-500);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+  font-family: var(--font);
+}
+
+.cls-btn:hover {
+  background: white;
+  color: var(--gray-800);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.cls-btn.active {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+  font-weight: 700;
+}
+
+/* ============================================================
+   PER-CLASS COLOR THEMES
+   Override --primary and background gradient per class.
+   Coding I (default) = indigo (#4f46e5) — already in :root
+   ============================================================ */
+
+/* ── Coding II — Blue ─────────────────────────────────────── */
+body.class-coding2 {
+  --primary:       #2563eb;
+  --primary-dark:  #1d4ed8;
+  --primary-light: #dbeafe;
+  background:
+    radial-gradient(ellipse 70% 55% at 15%  12%, rgba(37, 99, 235, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 65% at 88%  85%, rgba(96, 165, 250, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 75%  20%, rgba(29, 78, 216, 0.15) 0%, transparent 45%),
+    linear-gradient(160deg, #0f172a 0%, #1e293b 45%, #1e3a8a 100%);
+}
+
+body.class-coding2 .setup-banner {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+body.class-coding2 .lesson-header {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+body.class-coding2 .phase-tab.active {
+  background: #2563eb;
+}
+
+body.class-coding2 .btn-submit,
+body.class-coding2 .btn-primary {
+  background: #2563eb;
+}
+
+body.class-coding2 .btn-submit:hover:not(:disabled),
+body.class-coding2 .btn-primary:hover {
+  background: #1d4ed8;
+}
+
+body.class-coding2 .option-btn.selected,
+body.class-coding2 .tf-btn.selected {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+body.class-coding2 .option-btn:hover:not(:disabled),
+body.class-coding2 .tf-btn:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
+body.class-coding2 .btn-nav:hover,
+body.class-coding2 .btn-nav.active {
+  background: #2563eb;
+}
+
+body.class-coding2 .cls-btn.active {
+  color: #2563eb;
+}
+
+body.class-coding2 .form-group input:focus,
+body.class-coding2 .form-group select:focus {
+  border-color: #2563eb;
+}
+
+body.class-coding2 .app-header h1 span { color: #2563eb; }
+
+/* ── Videogame Design — Green ─────────────────────────────── */
+body.class-videogame {
+  --primary:       #059669;
+  --primary-dark:  #047857;
+  --primary-light: #d1fae5;
+  background:
+    radial-gradient(ellipse 70% 55% at 15%  12%, rgba(5, 150, 105, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 65% at 88%  85%, rgba(52, 211, 153, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 75%  20%, rgba(4, 120, 87, 0.15)  0%, transparent 45%),
+    linear-gradient(160deg, #0f1f1a 0%, #064e3b 45%, #065f46 100%);
+}
+
+body.class-videogame .setup-banner {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+body.class-videogame .lesson-header {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+body.class-videogame .phase-tab.active {
+  background: #059669;
+}
+
+body.class-videogame .btn-submit,
+body.class-videogame .btn-primary {
+  background: #059669;
+}
+
+body.class-videogame .btn-submit:hover:not(:disabled),
+body.class-videogame .btn-primary:hover {
+  background: #047857;
+}
+
+body.class-videogame .option-btn.selected,
+body.class-videogame .tf-btn.selected {
+  border-color: #059669;
+  background: #d1fae5;
+  color: #064e3b;
+}
+
+body.class-videogame .option-btn:hover:not(:disabled),
+body.class-videogame .tf-btn:hover:not(:disabled) {
+  border-color: #059669;
+  background: #d1fae5;
+}
+
+body.class-videogame .btn-nav:hover,
+body.class-videogame .btn-nav.active {
+  background: #059669;
+}
+
+body.class-videogame .cls-btn.active {
+  color: #059669;
+}
+
+body.class-videogame .form-group input:focus,
+body.class-videogame .form-group select:focus {
+  border-color: #059669;
+}
+
+body.class-videogame .app-header h1 span { color: #059669; }

@@ -1,6 +1,10 @@
 // ============================================================
-// Firebase Database Layer — Coding I Daily Activities
-// Handles: Auth, Firestore reads/writes, real-time listeners
+// Firebase Database Layer — 3-Class Activity Tracker
+//
+// Firestore paths by class:
+//   coding1   → /settings/classroom  + /grades/{key}         (original — backward compat)
+//   coding2   → /settings/coding2    + /grades_coding2/{key}
+//   videogame → /settings/videogame  + /grades_videogame/{key}
 // ============================================================
 
 let _db   = null;
@@ -15,7 +19,7 @@ function initFirebase() {
       typeof FIREBASE_CONFIG === 'undefined' ||
       FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY_HERE'
     ) {
-      console.info('[Firebase] No config found — running in local-only mode.');
+      console.info('[Firebase] No config — local-only mode.');
       return false;
     }
 
@@ -26,7 +30,7 @@ function initFirebase() {
     _db   = firebase.firestore();
     _auth = firebase.auth();
     firebaseReady = true;
-    console.info('[Firebase] Initialized successfully.');
+    console.info('[Firebase] Initialized.');
     return true;
   } catch (e) {
     console.error('[Firebase] Init error:', e);
@@ -34,43 +38,32 @@ function initFirebase() {
   }
 }
 
-// ── Active Day (Firestore: /settings/classroom) ──────────────
-//
-//  Document shape:
-//    { activeDay: number, isActive: boolean, setAt: Timestamp }
+// ── Path helpers ─────────────────────────────────────────────
 
-/**
- * One-time fetch of the active day document.
- * Returns null if it doesn't exist or Firebase is not ready.
- */
-async function getActiveDayFromFirebase() {
-  if (!firebaseReady) return null;
-  try {
-    const doc = await _db.collection('settings').doc('classroom').get();
-    return doc.exists ? doc.data() : null;
-  } catch (e) {
-    console.error('[Firebase] getActiveDay error:', e);
-    return null;
-  }
+function _settingsDocId(cls) {
+  if (cls === 'coding2')   return 'coding2';
+  if (cls === 'videogame') return 'videogame';
+  return 'classroom';   // coding1 — original path
 }
 
-/**
- * Real-time listener. callback(data) fires every time the
- * classroom document changes.  Returns an unsubscribe function.
- */
-function watchActiveDayChanges(callback) {
+function _gradesCollection(cls) {
+  if (cls === 'coding2')   return 'grades_coding2';
+  if (cls === 'videogame') return 'grades_videogame';
+  return 'grades';      // coding1 — original path
+}
+
+// ── Active Day ───────────────────────────────────────────────
+
+function watchActiveDayChanges(callback, cls) {
   if (!firebaseReady) return () => {};
-  return _db.collection('settings').doc('classroom').onSnapshot(
+  const docId = _settingsDocId(cls);
+  return _db.collection('settings').doc(docId).onSnapshot(
     doc => callback(doc.exists ? doc.data() : null),
     err => console.error('[Firebase] watchActiveDay error:', err)
   );
 }
 
-/**
- * Teacher: set which day is active (or deactivate).
- * When activating, all three sections default to open.
- */
-async function setActiveDayInFirebase(day, isActive) {
+async function setActiveDayInFirebase(day, isActive, cls) {
   if (!firebaseReady) return false;
   try {
     const data = {
@@ -78,11 +71,10 @@ async function setActiveDayInFirebase(day, isActive) {
       isActive:  isActive,
       setAt:     firebase.firestore.FieldValue.serverTimestamp()
     };
-    // Default all sections to open when activating a day
     if (isActive) {
       data.sections = { bell: true, practice: true, exit: true };
     }
-    await _db.collection('settings').doc('classroom').set(data);
+    await _db.collection('settings').doc(_settingsDocId(cls)).set(data);
     return true;
   } catch (e) {
     console.error('[Firebase] setActiveDay error:', e);
@@ -90,67 +82,39 @@ async function setActiveDayInFirebase(day, isActive) {
   }
 }
 
-/**
- * Teacher: open or lock a single section (bell / practice / exit).
- */
-async function setSectionInFirebase(section, isOpen) {
+async function setSectionInFirebase(section, isOpen, cls) {
   if (!firebaseReady) return false;
   try {
     const update = {
       setAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     update[`sections.${section}`] = isOpen;
-    await _db.collection('settings').doc('classroom').update(update);
+    await _db.collection('settings').doc(_settingsDocId(cls)).update(update);
     return true;
   } catch (e) {
-    console.error('[Firebase] setSectionInFirebase error:', e);
+    console.error('[Firebase] setSection error:', e);
     return false;
   }
 }
 
-// ── Grades (Firestore: /grades/{studentKey}) ─────────────────
-//
-//  Document shape:
-//    {
-//      name: "Alice Smith",
-//      days: {
-//        "3": {
-//          bellRinger:  { score: 1, total: 1, timestamp: "ISO" },
-//          practice:    { score: 4, total: 5, timestamp: "ISO" },
-//          exitTicket:  { score: 1, total: 1, timestamp: "ISO" }
-//        }
-//      },
-//      lastUpdated: Timestamp
-//    }
+// ── Grades ───────────────────────────────────────────────────
 
 function _studentKey(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
 }
 
-/**
- * Save one grade entry for a student.
- * Merges into the existing document so multiple phases
- * accumulate without overwriting each other.
- */
-async function saveGradeToFirebase(studentName, day, phase, score, total) {
+async function saveGradeToFirebase(studentName, day, phase, score, total, cls) {
   if (!firebaseReady) return false;
   try {
     const key = _studentKey(studentName);
-    const ref = _db.collection('grades').doc(key);
-
-    // Ensure the document exists first (safe with merge)
+    const ref = _db.collection(_gradesCollection(cls)).doc(key);
     await ref.set({ name: studentName }, { merge: true });
-
-    // Dot-notation update merges nested fields cleanly
     const update = {
       lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     };
     update[`days.${day}.${phase}`] = {
-      score,
-      total,
-      timestamp: new Date().toISOString()
+      score, total, timestamp: new Date().toISOString()
     };
-
     await ref.update(update);
     return true;
   } catch (e) {
@@ -159,14 +123,9 @@ async function saveGradeToFirebase(studentName, day, phase, score, total) {
   }
 }
 
-/**
- * Real-time listener for ALL student grades.
- * callback receives: { "Alice Smith": { "3": { bellRinger: ... } }, ... }
- * Returns unsubscribe function.
- */
-function watchAllGrades(callback) {
+function watchAllGrades(callback, cls) {
   if (!firebaseReady) return () => {};
-  return _db.collection('grades').onSnapshot(
+  return _db.collection(_gradesCollection(cls)).onSnapshot(
     snapshot => {
       const grades = {};
       snapshot.forEach(doc => {
@@ -179,13 +138,10 @@ function watchAllGrades(callback) {
   );
 }
 
-/**
- * One-time fetch of all grades (teacher CSV export).
- */
-async function getAllGradesFromFirebase() {
+async function getAllGradesFromFirebase(cls) {
   if (!firebaseReady) return null;
   try {
-    const snapshot = await _db.collection('grades').get();
+    const snapshot = await _db.collection(_gradesCollection(cls)).get();
     const grades = {};
     snapshot.forEach(doc => {
       const data = doc.data();
@@ -201,7 +157,7 @@ async function getAllGradesFromFirebase() {
 // ── Auth ─────────────────────────────────────────────────────
 
 async function signInTeacher(email, password) {
-  if (!firebaseReady) return { error: 'Firebase is not configured yet.' };
+  if (!firebaseReady) return { error: 'Firebase is not configured.' };
   try {
     const cred = await _auth.signInWithEmailAndPassword(email, password);
     return { user: cred.user };

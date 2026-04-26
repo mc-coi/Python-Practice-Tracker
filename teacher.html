@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Teacher Dashboard — Coding I</title>
+  <title>Teacher Dashboard — Daily Activities</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     /* ── Teacher-specific styles ────────────────────────── */
@@ -53,6 +53,58 @@
       min-height: 20px;
       margin-bottom: 8px;
       font-weight: 500;
+    }
+
+    /* ── Teacher class tab bar ─────────────────────────── */
+    .teacher-class-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      background: white;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      box-shadow: var(--shadow);
+      flex-wrap: wrap;
+    }
+
+    .teacher-class-tab {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 20px;
+      border-radius: 8px;
+      border: 2px solid var(--gray-200);
+      background: var(--gray-100);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      font-family: var(--font);
+      color: var(--gray-600);
+    }
+
+    .teacher-class-tab:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .teacher-class-tab.active {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: white;
+    }
+
+    .teacher-class-tab-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--gray-400);
+      margin-right: auto;
+      padding: 9px 6px 9px 0;
+      white-space: nowrap;
+      align-self: center;
     }
 
     /* Status badge */
@@ -337,6 +389,35 @@
     .grades-table-wrap {
       overflow-x: auto;
     }
+
+    /* ── Per-class color overrides for teacher tabs ── */
+    body.teacher-coding2 .teacher-class-tab.active,
+    body.teacher-coding2 .day-picker-row select:focus,
+    body.teacher-coding2 .btn-activate { /* intentionally leave success green */ }
+
+    body.teacher-coding2 .teacher-class-tab:hover {
+      border-color: #2563eb;
+      color: #2563eb;
+      background: #eff6ff;
+    }
+
+    body.teacher-coding2 .teacher-class-tab.active {
+      border-color: #2563eb;
+      background: #2563eb;
+      color: white;
+    }
+
+    body.teacher-videogame .teacher-class-tab:hover {
+      border-color: #059669;
+      color: #059669;
+      background: #ecfdf5;
+    }
+
+    body.teacher-videogame .teacher-class-tab.active {
+      border-color: #059669;
+      background: #059669;
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -346,12 +427,11 @@
     <!-- Header -->
     <header class="app-header">
       <div class="logo">
-        <div class="logo-icon">🐍</div>
-        <h1>Coding <span>I</span></h1>
+        <div class="logo-icon" id="teacher-header-icon">🏫</div>
+        <h1>Teacher <span id="teacher-header-class">Dashboard</span></h1>
       </div>
       <nav class="header-nav">
         <button class="btn-nav" onclick="window.location.href='index.html'">Student View</button>
-        <button class="btn-nav" onclick="window.location.href='grades.html'">Grade Report</button>
         <button class="btn-nav active">🏫 Teacher</button>
       </nav>
     </header>
@@ -384,10 +464,27 @@
     <!-- Dashboard Section (hidden until authenticated) -->
     <div id="dashboard-section" style="display:none;">
 
+      <!-- Class tab bar -->
+      <div class="teacher-class-tabs">
+        <span class="teacher-class-tab-label">Managing:</span>
+        <button class="teacher-class-tab active" id="tcls-btn-coding1"
+                onclick="switchTeacherClass('coding1')">
+          🐍 Coding&nbsp;I
+        </button>
+        <button class="teacher-class-tab" id="tcls-btn-coding2"
+                onclick="switchTeacherClass('coding2')">
+          💻 Coding&nbsp;II
+        </button>
+        <button class="teacher-class-tab" id="tcls-btn-videogame"
+                onclick="switchTeacherClass('videogame')">
+          🎮 Videogame Design
+        </button>
+      </div>
+
       <!-- Control Panel -->
       <div class="control-panel">
         <div class="control-header">
-          <h2>🎮 Class Control</h2>
+          <h2 id="control-panel-title">🎮 Class Control</h2>
           <div style="display:flex; align-items:center; gap:12px;">
             <span class="status-badge status-inactive" id="status-badge">
               <span style="width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;"></span>
@@ -400,7 +497,7 @@
         <div class="day-picker-row">
           <label for="teacher-day-select">Set Lesson:</label>
           <select id="teacher-day-select">
-            <!-- Populated by JS -->
+            <!-- Populated by JS based on active class -->
           </select>
         </div>
 
@@ -468,19 +565,47 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
-  <!-- App data + Firebase layer -->
+  <!-- App data + Firebase layer (all 3 classes) -->
   <script src="js/firebase-config.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/data-coding1.js"></script>
+  <script src="js/data-coding2.js"></script>
+  <script src="js/data-videogame.js"></script>
   <script src="js/grades.js"></script>
   <script src="js/firebase-db.js"></script>
 
   <script>
   // ============================================================
-  // Teacher Dashboard Logic
+  // Teacher Dashboard Logic — 3-Class
   // ============================================================
 
+  // ── Class metadata ──────────────────────────────────────────
+  const TEACHER_CLASS_META = {
+    coding1:   { display: 'Coding I',         icon: '🐍', bodyClass: 'teacher-coding1'   },
+    coding2:   { display: 'Coding II',        icon: '💻', bodyClass: 'teacher-coding2'   },
+    videogame: { display: 'Videogame Design', icon: '🎮', bodyClass: 'teacher-videogame' }
+  };
+
+  // ── Active teacher class ────────────────────────────────────
+  let activeTeacherClass = localStorage.getItem('mc_teacher_class') || 'coding1';
+
+  // ── Listener handles ───────────────────────────────────────
   let currentActiveDayData = null;   // latest snapshot from Firestore
-  let gradesUnsubscribe    = null;   // cleanup function for grades listener
+  let dayUnsubscribe       = null;   // cleanup for active-day listener
+  let gradesUnsubscribe    = null;   // cleanup for grades listener
+
+  // ── Helper: lesson lookup for current teacher class ─────────
+  function getTeacherLesson(day) {
+    if (activeTeacherClass === 'coding2')   return getLessonC2(day);
+    if (activeTeacherClass === 'videogame') return getLessonVGD(day);
+    return LESSONS[day] || null;
+  }
+
+  function getTeacherTotalDays() {
+    if (activeTeacherClass === 'coding2')   return TOTAL_DAYS_C2;
+    if (activeTeacherClass === 'videogame') return TOTAL_DAYS_VGD;
+    return TOTAL_DAYS;
+  }
 
   // ── Init ───────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
@@ -515,7 +640,7 @@
       return;
     }
 
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.textContent = 'Signing in…';
     errEl.textContent = '';
 
@@ -523,7 +648,7 @@
 
     if (result.error) {
       errEl.textContent = result.error;
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Sign In';
     }
     // onAuthChanged will fire and call showDashboard
@@ -532,48 +657,90 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter' &&
         document.activeElement &&
-        ['teacher-email','teacher-password'].includes(document.activeElement.id)) {
+        ['teacher-email', 'teacher-password'].includes(document.activeElement.id)) {
       doLogin();
     }
   });
 
   async function doSignOut() {
-    if (gradesUnsubscribe) { gradesUnsubscribe(); gradesUnsubscribe = null; }
+    _unsubscribeAll();
     await signOutTeacher();
   }
 
+  function _unsubscribeAll() {
+    if (dayUnsubscribe)    { dayUnsubscribe();    dayUnsubscribe    = null; }
+    if (gradesUnsubscribe) { gradesUnsubscribe(); gradesUnsubscribe = null; }
+  }
+
   function showLogin() {
-    document.getElementById('login-section').style.display   = 'block';
+    document.getElementById('login-section').style.display    = 'block';
     document.getElementById('dashboard-section').style.display = 'none';
   }
 
   function showDashboard(user) {
-    document.getElementById('login-section').style.display   = 'none';
+    document.getElementById('login-section').style.display    = 'none';
     document.getElementById('dashboard-section').style.display = 'block';
 
-    populateTeacherDaySelect();
+    // Apply saved class
+    _applyTeacherClass(activeTeacherClass);
+  }
 
-    // Watch active day
-    watchActiveDayChanges(data => {
-      currentActiveDayData = data;
-      updateControlPanel(data);
+  // ── Class Switcher ─────────────────────────────────────────
+  function switchTeacherClass(cls) {
+    if (cls === activeTeacherClass) return;
+    activeTeacherClass = cls;
+    localStorage.setItem('mc_teacher_class', cls);
+    _applyTeacherClass(cls);
+    showToast(`Switched to ${TEACHER_CLASS_META[cls].display}`);
+  }
+
+  function _applyTeacherClass(cls) {
+    // Update body class for color theming
+    Object.values(TEACHER_CLASS_META).forEach(m => document.body.classList.remove(m.bodyClass));
+    document.body.classList.add(TEACHER_CLASS_META[cls].bodyClass);
+
+    // Update header
+    const meta = TEACHER_CLASS_META[cls];
+    document.getElementById('teacher-header-icon').textContent  = meta.icon;
+    document.getElementById('teacher-header-class').textContent = meta.display;
+
+    // Update tab active states
+    document.querySelectorAll('.teacher-class-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.id === `tcls-btn-${cls}`);
     });
 
-    // Watch all grades in real time
-    if (gradesUnsubscribe) gradesUnsubscribe();
-    gradesUnsubscribe = watchAllGrades(renderGradesTable);
+    // Update control panel title
+    document.getElementById('control-panel-title').textContent =
+      `${meta.icon} ${meta.display} Control`;
+
+    // Reset panel state visually while we resubscribe
+    currentActiveDayData = null;
+    updateControlPanel(null);
+
+    // Repopulate day select for this class
+    populateTeacherDaySelect();
+
+    // Resubscribe listeners for the new class
+    _unsubscribeAll();
+
+    dayUnsubscribe = watchActiveDayChanges(data => {
+      currentActiveDayData = data;
+      updateControlPanel(data);
+    }, cls);
+
+    gradesUnsubscribe = watchAllGrades(renderGradesTable, cls);
   }
 
   // ── Day Selector ────────────────────────────────────────────
   function populateTeacherDaySelect() {
     const sel = document.getElementById('teacher-day-select');
-    if (!sel || sel.options.length > 0) return;
+    sel.innerHTML = '';   // clear previous class options
 
     let currentUnit = 0;
     let optgroup    = null;
 
-    for (let day = 1; day <= TOTAL_DAYS; day++) {
-      const lesson = getLesson(day);
+    for (let day = 1; day <= getTeacherTotalDays(); day++) {
+      const lesson = getTeacherLesson(day);
       if (!lesson) continue;
 
       if (lesson.unit !== currentUnit) {
@@ -594,7 +761,7 @@
   async function toggleSection(section) {
     if (!currentActiveDayData || !currentActiveDayData.isActive) return;
 
-    const current = currentActiveDayData.sections
+    const current  = currentActiveDayData.sections
       ? currentActiveDayData.sections[section] !== false
       : true;
     const newState = !current;
@@ -602,11 +769,11 @@
     const btn = document.getElementById(`toggle-${section}`);
     if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
 
-    await setSectionInFirebase(section, newState);
-    // updateControlPanel will fire via the onSnapshot listener
+    await setSectionInFirebase(section, newState, activeTeacherClass);
+    // updateControlPanel will fire via onSnapshot
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
 
-    const label = section === 'bell' ? 'Bell Ringer'
+    const label = section === 'bell'     ? 'Bell Ringer'
                 : section === 'practice' ? 'Practice' : 'Exit Ticket';
     showToast(`${label} ${newState ? 'unlocked ✓' : 'locked 🔒'}`);
   }
@@ -617,17 +784,17 @@
     const day = parseInt(sel.value);
     if (!day) return;
 
-    const btn = document.getElementById('btn-activate');
+    const btn     = document.getElementById('btn-activate');
     btn.disabled    = true;
     btn.textContent = 'Activating…';
 
-    const ok = await setActiveDayInFirebase(day, true);
+    const ok = await setActiveDayInFirebase(day, true, activeTeacherClass);
 
     btn.disabled    = false;
     btn.textContent = '▶ Activate Day';
 
     if (ok) {
-      showToast(`Day ${day} is now active for students!`);
+      showToast(`Day ${day} is now active for ${TEACHER_CLASS_META[activeTeacherClass].display}!`);
     } else {
       showToast('Error — could not activate day.');
     }
@@ -637,11 +804,11 @@
     const sel = document.getElementById('teacher-day-select');
     const day = parseInt(sel.value);
 
-    const btn = document.getElementById('btn-deactivate');
+    const btn     = document.getElementById('btn-deactivate');
     btn.disabled    = true;
     btn.textContent = 'Deactivating…';
 
-    await setActiveDayInFirebase(day, false);
+    await setActiveDayInFirebase(day, false, activeTeacherClass);
 
     btn.disabled    = false;
     btn.textContent = '⏹ Deactivate';
@@ -650,16 +817,16 @@
 
   // ── Control Panel UI ────────────────────────────────────────
   function updateControlPanel(data) {
-    const statusBadge     = document.getElementById('status-badge');
-    const infoBox         = document.getElementById('current-lesson-info');
-    const setAtLabel      = document.getElementById('set-at-label');
-    const btnActivate     = document.getElementById('btn-activate');
-    const btnDeactivate   = document.getElementById('btn-deactivate');
-    const sectionToggles  = document.getElementById('section-toggles');
-    const sel             = document.getElementById('teacher-day-select');
+    const statusBadge    = document.getElementById('status-badge');
+    const infoBox        = document.getElementById('current-lesson-info');
+    const setAtLabel     = document.getElementById('set-at-label');
+    const btnActivate    = document.getElementById('btn-activate');
+    const btnDeactivate  = document.getElementById('btn-deactivate');
+    const sectionToggles = document.getElementById('section-toggles');
+    const sel            = document.getElementById('teacher-day-select');
 
     if (data && data.isActive && data.activeDay) {
-      const lesson = getLesson(data.activeDay);
+      const lesson = getTeacherLesson(data.activeDay);
 
       statusBadge.className = 'status-badge status-active';
       statusBadge.innerHTML = `<span class="live-dot" style="width:8px;height:8px;border-radius:50%;background:currentColor;"></span> Active`;
@@ -672,14 +839,14 @@
         </span>
       `;
 
-      btnActivate.style.display   = 'none';
-      btnDeactivate.style.display = 'inline-block';
+      btnActivate.style.display    = 'none';
+      btnDeactivate.style.display  = 'inline-block';
       sectionToggles.style.display = 'block';
 
       // Update section toggle buttons
       const sections = data.sections || { bell: true, practice: true, exit: true };
       ['bell', 'practice', 'exit'].forEach(s => {
-        const btn = document.getElementById(`toggle-${s}`);
+        const btn  = document.getElementById(`toggle-${s}`);
         if (!btn) return;
         const isOpen = sections[s] !== false;
         btn.className = `section-toggle-btn ${isOpen ? 'is-open' : 'is-locked'}`;
@@ -691,6 +858,7 @@
         const d = data.setAt.toDate ? data.setAt.toDate() : new Date(data.setAt);
         setAtLabel.textContent = `Activated ${d.toLocaleString()}`;
       }
+
     } else {
       statusBadge.className = 'status-badge status-inactive';
       statusBadge.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;"></span> Inactive`;
@@ -711,11 +879,11 @@
 
   // ── Grades Table ───────────────────────────────────────────
   function renderGradesTable(grades) {
-    const container   = document.getElementById('grades-content');
-    const countEl     = document.getElementById('student-count');
-    const activeDay   = currentActiveDayData && currentActiveDayData.isActive
-                          ? currentActiveDayData.activeDay
-                          : null;
+    const container = document.getElementById('grades-content');
+    const countEl   = document.getElementById('student-count');
+    const activeDay = currentActiveDayData && currentActiveDayData.isActive
+                        ? currentActiveDayData.activeDay
+                        : null;
 
     const names = Object.keys(grades).sort();
     countEl.textContent = `${names.length} student${names.length !== 1 ? 's' : ''}`;
@@ -730,16 +898,13 @@
       return;
     }
 
-    const dayLabel = activeDay ? `Day ${activeDay}` : 'All Days';
-
     // Build table rows
     const rows = names.map(name => {
       const allDays = grades[name] || {};
 
-      // Determine which day(s) to show
       const daysToShow = activeDay
         ? (allDays[activeDay] ? [String(activeDay)] : [])
-        : Object.keys(allDays).sort((a,b) => Number(a)-Number(b));
+        : Object.keys(allDays).sort((a, b) => Number(a) - Number(b));
 
       if (daysToShow.length === 0) {
         return `
@@ -752,19 +917,16 @@
       }
 
       return daysToShow.map(day => {
-        const d   = allDays[day] || {};
-        const br  = d.bellRinger  ? `${d.bellRinger.score}/${d.bellRinger.total}` : '<span class="dash-symbol">—</span>';
-        const pr  = d.practice    ? `${d.practice.score}/${d.practice.total}` : '<span class="dash-symbol">—</span>';
-        const et  = d.exitTicket  ? `${d.exitTicket.score}/${d.exitTicket.total}` : '<span class="dash-symbol">—</span>';
+        const d  = allDays[day] || {};
+        const br = d.bellRinger ? `${d.bellRinger.score}/${d.bellRinger.total}` : '<span class="dash-symbol">—</span>';
+        const pr = d.practice   ? `${d.practice.score}/${d.practice.total}`     : '<span class="dash-symbol">—</span>';
+        const et = d.exitTicket ? `${d.exitTicket.score}/${d.exitTicket.total}` : '<span class="dash-symbol">—</span>';
 
         let totalScore = 0, totalPossible = 0;
-        ['bellRinger','practice','exitTicket'].forEach(p => {
+        ['bellRinger', 'practice', 'exitTicket'].forEach(p => {
           if (d[p]) { totalScore += d[p].score; totalPossible += d[p].total; }
         });
-        const pct = totalPossible > 0
-          ? Math.round((totalScore / totalPossible) * 100)
-          : null;
-
+        const pct       = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : null;
         const pillClass = pct !== null ? getGradeClass(pct) : 'grade-na';
         const pillText  = pct !== null ? pct + '%' : 'In progress';
 
@@ -801,39 +963,40 @@
   // ── CSV Export ─────────────────────────────────────────────
   async function exportCSV() {
     showToast('Fetching grades…');
-    const grades = await getAllGradesFromFirebase();
+    const grades = await getAllGradesFromFirebase(activeTeacherClass);
 
     if (!grades || Object.keys(grades).length === 0) {
       showToast('No grades to export yet.');
       return;
     }
 
-    const rows = [['Student','Day','Unit','Lesson','Bell Ringer','Practice','Exit Ticket','Overall %','Date']];
+    const clsName = TEACHER_CLASS_META[activeTeacherClass].display;
+    const rows    = [['Class', 'Student', 'Day', 'Unit', 'Lesson', 'Bell Ringer', 'Practice', 'Exit Ticket', 'Overall %', 'Date']];
 
     Object.keys(grades).sort().forEach(name => {
       const allDays = grades[name] || {};
-      Object.keys(allDays).sort((a,b)=>Number(a)-Number(b)).forEach(day => {
+      Object.keys(allDays).sort((a, b) => Number(a) - Number(b)).forEach(day => {
         const d      = allDays[day];
-        const lesson = getLesson(Number(day));
-        const br  = d.bellRinger  ? `${d.bellRinger.score}/${d.bellRinger.total}` : '—';
-        const pr  = d.practice    ? `${d.practice.score}/${d.practice.total}` : '—';
-        const et  = d.exitTicket  ? `${d.exitTicket.score}/${d.exitTicket.total}` : '—';
+        const lesson = getTeacherLesson(Number(day));
+        const br  = d.bellRinger ? `${d.bellRinger.score}/${d.bellRinger.total}` : '—';
+        const pr  = d.practice   ? `${d.practice.score}/${d.practice.total}`     : '—';
+        const et  = d.exitTicket ? `${d.exitTicket.score}/${d.exitTicket.total}` : '—';
 
         let totalScore = 0, totalPossible = 0;
-        ['bellRinger','practice','exitTicket'].forEach(p => {
+        ['bellRinger', 'practice', 'exitTicket'].forEach(p => {
           if (d[p]) { totalScore += d[p].score; totalPossible += d[p].total; }
         });
-        const pct = totalPossible > 0 ? Math.round((totalScore / totalPossible)*100)+'%' : '—';
+        const pct = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) + '%' : '—';
 
-        const timestamps = ['bellRinger','practice','exitTicket']
+        const timestamps = ['bellRinger', 'practice', 'exitTicket']
           .filter(p => d[p] && d[p].timestamp)
           .map(p => d[p].timestamp);
         const date = timestamps.length
-          ? new Date(timestamps[timestamps.length-1]).toLocaleDateString()
+          ? new Date(timestamps[timestamps.length - 1]).toLocaleDateString()
           : '—';
 
         rows.push([
-          name, day,
+          clsName, name, day,
           lesson ? lesson.unitName : '',
           lesson ? lesson.title    : '',
           br, pr, et, pct, date
@@ -841,12 +1004,13 @@
       });
     });
 
-    const csv  = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const csv  = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `coding-grades-${new Date().toISOString().slice(0,10)}.csv`;
+    const safeClass = activeTeacherClass.replace(/[^a-z0-9]/g, '-');
+    a.download = `grades-${safeClass}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('CSV downloaded!');
@@ -855,11 +1019,11 @@
   // ── Helpers ────────────────────────────────────────────────
   function escapeHtml(text) {
     return String(text)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   function showToast(message, duration = 3000) {
-    let toast = document.getElementById('toast');
+    const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.classList.add('show');
     clearTimeout(toast._timer);

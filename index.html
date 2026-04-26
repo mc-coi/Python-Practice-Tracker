@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Coding I — Daily Activities</title>
+  <title>Daily Activities — Coding I · Coding II · Videogame Design</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -13,13 +13,29 @@
     <!-- Header -->
     <header class="app-header">
       <div class="logo">
-        <div class="logo-icon">🐍</div>
-        <h1>Coding <span>I</span></h1>
+        <div class="logo-icon" id="header-icon">🐍</div>
+        <h1>Daily <span id="header-class-name">Activities</span></h1>
       </div>
+
+      <!-- Class switcher + Teacher nav -->
       <nav class="header-nav">
-        <button class="btn-nav active" data-target="home">Activities</button>
-        <button class="btn-nav" data-target="grades" onclick="window.location.href='grades.html'">Grade Report</button>
-        <button class="btn-nav teacher-btn" onclick="window.location.href='teacher.html'" title="Teacher Dashboard">🏫 Teacher</button>
+        <div class="class-switcher">
+          <button class="cls-btn" id="cls-btn-coding1"
+                  onclick="switchClass('coding1')" title="Coding I">
+            🐍 Coding&nbsp;I
+          </button>
+          <button class="cls-btn" id="cls-btn-coding2"
+                  onclick="switchClass('coding2')" title="Coding II">
+            💻 Coding&nbsp;II
+          </button>
+          <button class="cls-btn" id="cls-btn-videogame"
+                  onclick="switchClass('videogame')" title="Videogame Design">
+            🎮 Videogame
+          </button>
+        </div>
+        <button class="btn-nav teacher-btn"
+                onclick="window.location.href='teacher.html'"
+                title="Teacher Dashboard">🏫 Teacher</button>
       </nav>
     </header>
 
@@ -40,9 +56,47 @@
   <!-- App scripts in dependency order -->
   <script src="js/firebase-config.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/data-coding1.js"></script>
+  <script src="js/data-coding2.js"></script>
+  <script src="js/data-videogame.js"></script>
   <script src="js/grades.js"></script>
   <script src="js/firebase-db.js"></script>
   <script src="js/app.js"></script>
+
+  <script>
+    // ── Sync header display + class switcher buttons on load ──
+    const CLASS_META = {
+      coding1:   { display: 'Coding I',         icon: '🐍' },
+      coding2:   { display: 'Coding II',        icon: '💻' },
+      videogame: { display: 'Videogame Design', icon: '🎮' }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const cls = localStorage.getItem('mc_selected_class') || 'coding1';
+      _updateHeader(cls);
+      _syncClassBtns(cls);
+    });
+
+    // Wrap app.js switchClass to also update the header
+    const _origSwitchClass = window.switchClass;
+    window.switchClass = function(cls) {
+      if (typeof _origSwitchClass === 'function') _origSwitchClass(cls);
+      _updateHeader(cls);
+      _syncClassBtns(cls);
+    };
+
+    function _updateHeader(cls) {
+      const meta = CLASS_META[cls] || { display: 'Activities', icon: '📚' };
+      document.getElementById('header-class-name').textContent = meta.display;
+      document.getElementById('header-icon').textContent        = meta.icon;
+    }
+
+    function _syncClassBtns(cls) {
+      document.querySelectorAll('.cls-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.id === `cls-btn-${cls}`);
+      });
+    }
+  </script>
 
 </body>
 </html>

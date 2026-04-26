@@ -1,68 +1,59 @@
 // ============================================================
-// Grade Tracking — localStorage-backed grade storage
+// Grade Tracking — localStorage-backed, 3-class aware
+//
+// Storage keys:
+//   coding1   → 'cs_coding_grades_v1'   (original — backward compat)
+//   coding2   → 'mc_grades_coding2_v1'
+//   videogame → 'mc_grades_videogame_v1'
 // ============================================================
 
-const STORAGE_KEY = 'cs_coding_grades_v1';
+function _storageKey(cls) {
+  if (cls === 'coding2')   return 'mc_grades_coding2_v1';
+  if (cls === 'videogame') return 'mc_grades_videogame_v1';
+  return 'cs_coding_grades_v1';   // coding1 original key
+}
 
-// Data structure:
-// {
-//   studentName: {
-//     dayNumber: {
-//       bellRinger:  { score: 0|1, total: 1, timestamp: ISO },
-//       practice:    { score: n, total: n, timestamp: ISO },
-//       exitTicket:  { score: 0|1, total: 1, timestamp: ISO }
-//     }
-//   }
-// }
-
-function loadAllGrades() {
+function loadAllGrades(cls) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(_storageKey(cls));
     return raw ? JSON.parse(raw) : {};
   } catch (e) {
-    console.error('Grade load error:', e);
     return {};
   }
 }
 
-function saveAllGrades(data) {
+function saveAllGrades(cls, data) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(_storageKey(cls), JSON.stringify(data));
   } catch (e) {
     console.error('Grade save error:', e);
   }
 }
 
-function saveSessionGrade(studentName, day, phase, score, total) {
-  // ── localStorage (always) ──────────────────────────────────
-  const all = loadAllGrades();
+function saveSessionGrade(studentName, day, phase, score, total, cls) {
+  // ── localStorage (always) ─────────────────────────────
+  const all = loadAllGrades(cls);
   if (!all[studentName]) all[studentName] = {};
   if (!all[studentName][day]) all[studentName][day] = {};
-  all[studentName][day][phase] = {
-    score,
-    total,
-    timestamp: new Date().toISOString()
-  };
-  saveAllGrades(all);
+  all[studentName][day][phase] = { score, total, timestamp: new Date().toISOString() };
+  saveAllGrades(cls, all);
 
-  // ── Firebase (when configured) ─────────────────────────────
+  // ── Firebase (when configured) ────────────────────────
   if (typeof saveGradeToFirebase === 'function') {
-    saveGradeToFirebase(studentName, day, phase, score, total);
+    saveGradeToFirebase(studentName, day, phase, score, total, cls);
   }
 }
 
-function getStudentGrades(studentName) {
-  const all = loadAllGrades();
-  return all[studentName] || {};
+function getStudentGrades(studentName, cls) {
+  return (loadAllGrades(cls)[studentName]) || {};
 }
 
-function getAllStudents() {
-  const all = loadAllGrades();
-  return Object.keys(all).sort();
+function getAllStudents(cls) {
+  return Object.keys(loadAllGrades(cls)).sort();
 }
 
-function getStudentSummary(studentName) {
-  const grades = getStudentGrades(studentName);
+function getStudentSummary(studentName, cls) {
+  const grades = getStudentGrades(studentName, cls);
   let totalScore = 0, totalPossible = 0, sessions = 0;
 
   for (const day in grades) {
@@ -108,57 +99,19 @@ function getScoreCircleClass(pct) {
 
 function getFeedbackMessage(pct) {
   if (pct === 100) return '🎉 Perfect score! Outstanding work!';
-  if (pct >= 90) return 'Excellent work! You have a strong grasp of today\'s material.';
-  if (pct >= 80) return 'Great job! A few small gaps to review, but solid understanding.';
-  if (pct >= 70) return 'Good effort! Review the questions you missed and keep practicing.';
-  if (pct >= 60) return 'Keep working! Review today\'s lesson notes and try practice problems again.';
+  if (pct >= 90)   return "Excellent work! You have a strong grasp of today's material.";
+  if (pct >= 80)   return 'Great job! A few small gaps to review, but solid understanding.';
+  if (pct >= 70)   return 'Good effort! Review the questions you missed and keep practicing.';
+  if (pct >= 60)   return "Keep working! Review today's lesson notes and try again.";
   return 'This material needs more review. Ask your teacher for help!';
 }
 
-function deleteStudentGrades(studentName) {
-  const all = loadAllGrades();
+function deleteStudentGrades(studentName, cls) {
+  const all = loadAllGrades(cls);
   delete all[studentName];
-  saveAllGrades(all);
+  saveAllGrades(cls, all);
 }
 
-function deleteAllGrades() {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
-function exportGradesCSV() {
-  const all = loadAllGrades();
-  const students = Object.keys(all).sort();
-  if (students.length === 0) return null;
-
-  const rows = [['Student', 'Day', 'Unit', 'Lesson', 'Bell Ringer', 'Practice', 'Exit Ticket', 'Overall %', 'Date']];
-
-  students.forEach(name => {
-    const studentData = all[name];
-    Object.keys(studentData).sort((a, b) => Number(a) - Number(b)).forEach(day => {
-      const d = studentData[day];
-      const lesson = getLesson(Number(day));
-      const unitName = lesson ? lesson.unitName : '';
-      const title = lesson ? lesson.title : '';
-
-      const br = d.bellRinger ? `${d.bellRinger.score}/${d.bellRinger.total}` : '—';
-      const pr = d.practice ? `${d.practice.score}/${d.practice.total}` : '—';
-      const et = d.exitTicket ? `${d.exitTicket.score}/${d.exitTicket.total}` : '—';
-
-      let totalScore = 0, totalPossible = 0;
-      ['bellRinger', 'practice', 'exitTicket'].forEach(p => {
-        if (d[p]) { totalScore += d[p].score; totalPossible += d[p].total; }
-      });
-      const pct = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) + '%' : '—';
-
-      // Get most recent timestamp
-      const timestamps = ['bellRinger', 'practice', 'exitTicket']
-        .filter(p => d[p] && d[p].timestamp)
-        .map(p => d[p].timestamp);
-      const date = timestamps.length > 0 ? new Date(timestamps[timestamps.length - 1]).toLocaleDateString() : '—';
-
-      rows.push([name, day, unitName, title, br, pr, et, pct, date]);
-    });
-  });
-
-  return rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+function deleteAllGrades(cls) {
+  localStorage.removeItem(_storageKey(cls));
 }
