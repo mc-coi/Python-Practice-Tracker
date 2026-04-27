@@ -154,7 +154,21 @@ async function getAllGradesFromFirebase(cls) {
   }
 }
 
-// ── Auth ─────────────────────────────────────────────────────
+// ── Delete Student ───────────────────────────────────────────
+
+async function deleteStudentFromFirebase(studentName, cls) {
+  if (!firebaseReady) return false;
+  try {
+    const key = _studentKey(studentName);
+    await _db.collection(_gradesCollection(cls)).doc(key).delete();
+    return true;
+  } catch (e) {
+    console.error('[Firebase] deleteStudent error:', e);
+    return false;
+  }
+}
+
+// ── Auth (Teacher — email/password) ──────────────────────────
 
 async function signInTeacher(email, password) {
   if (!firebaseReady) return { error: 'Firebase is not configured.' };
@@ -173,4 +187,27 @@ async function signOutTeacher() {
 function onAuthChanged(callback) {
   if (!_auth) { callback(null); return () => {}; }
   return _auth.onAuthStateChanged(callback);
+}
+
+// ── Google Sign-In (student name lookup only) ─────────────────
+// Opens a Google popup to read the student's display name, then
+// immediately signs out — so student auth never bleeds into the
+// teacher dashboard's onAuthChanged check.
+
+async function signInWithGoogleForName() {
+  if (!firebaseReady) return { error: 'Firebase is not configured.' };
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('profile');
+    const cred = await _auth.signInWithPopup(provider);
+    const name = cred.user.displayName || cred.user.email || '';
+    await _auth.signOut();   // sign out immediately — name is all we needed
+    return { name };
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user' ||
+        e.code === 'auth/cancelled-popup-request') {
+      return { cancelled: true };
+    }
+    return { error: e.message };
+  }
 }

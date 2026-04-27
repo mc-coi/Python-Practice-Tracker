@@ -390,6 +390,34 @@
       overflow-x: auto;
     }
 
+    /* Delete student button */
+    .btn-delete-student {
+      background: transparent;
+      border: none;
+      color: var(--gray-300);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      line-height: 1;
+      transition: color .15s, background .15s;
+    }
+
+    .btn-delete-student:hover {
+      color: var(--error);
+      background: var(--error-light);
+    }
+
+    /* Current class label in grades header */
+    .grades-class-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--gray-400);
+      margin-left: 4px;
+    }
+
     /* ── Per-class color overrides for teacher tabs ── */
     body.teacher-coding2 .teacher-class-tab.active,
     body.teacher-coding2 .day-picker-row select:focus,
@@ -537,6 +565,7 @@
           <h3>
             <span class="live-dot"></span>
             Student Progress
+            <span class="grades-class-label" id="grades-class-label"></span>
           </h3>
           <div class="tools">
             <span class="student-count" id="student-count">0 students</span>
@@ -712,6 +741,10 @@
     // Update control panel title
     document.getElementById('control-panel-title').textContent =
       `${meta.icon} ${meta.display} Control`;
+
+    // Update grades panel class label
+    const gradesLabel = document.getElementById('grades-class-label');
+    if (gradesLabel) gradesLabel.textContent = `— ${meta.display}`;
 
     // Reset panel state visually while we resubscribe
     currentActiveDayData = null;
@@ -898,7 +931,7 @@
       return;
     }
 
-    // Build table rows
+    // Build table rows — one row per student per visible day
     const rows = names.map(name => {
       const allDays = grades[name] || {};
 
@@ -906,17 +939,24 @@
         ? (allDays[activeDay] ? [String(activeDay)] : [])
         : Object.keys(allDays).sort((a, b) => Number(a) - Number(b));
 
+      // Encode name for use as an HTML attribute (escaping quotes)
+      const nameAttr = escapeHtml(name).replace(/'/g, '&#39;');
+
       if (daysToShow.length === 0) {
         return `
           <tr>
             <td style="font-weight:600;">${escapeHtml(name)}</td>
             <td>${activeDay ? String(activeDay) : '—'}</td>
             <td colspan="4" style="color:var(--gray-400); font-size:0.85rem;">Not started yet</td>
+            <td>
+              <button class="btn-delete-student" title="Delete ${escapeHtml(name)}"
+                      onclick="confirmDeleteStudent('${nameAttr}')">🗑️</button>
+            </td>
           </tr>
         `;
       }
 
-      return daysToShow.map(day => {
+      return daysToShow.map((day, dayIdx) => {
         const d  = allDays[day] || {};
         const br = d.bellRinger ? `${d.bellRinger.score}/${d.bellRinger.total}` : '<span class="dash-symbol">—</span>';
         const pr = d.practice   ? `${d.practice.score}/${d.practice.total}`     : '<span class="dash-symbol">—</span>';
@@ -930,14 +970,23 @@
         const pillClass = pct !== null ? getGradeClass(pct) : 'grade-na';
         const pillText  = pct !== null ? pct + '%' : 'In progress';
 
+        // Only show the delete button on the first row for this student
+        const deleteCell = dayIdx === 0
+          ? `<td rowspan="${daysToShow.length}" style="vertical-align:middle; text-align:center;">
+               <button class="btn-delete-student" title="Delete ${escapeHtml(name)}"
+                       onclick="confirmDeleteStudent('${nameAttr}')">🗑️</button>
+             </td>`
+          : '';
+
         return `
           <tr>
-            <td style="font-weight:600;">${escapeHtml(name)}</td>
+            ${dayIdx === 0 ? `<td rowspan="${daysToShow.length}" style="font-weight:600; vertical-align:middle;">${escapeHtml(name)}</td>` : ''}
             <td style="color:var(--gray-500);">${day}</td>
             <td>${br}</td>
             <td>${pr}</td>
             <td>${et}</td>
             <td><span class="grade-pill ${pillClass}">${pillText}</span></td>
+            ${deleteCell}
           </tr>
         `;
       }).join('');
@@ -953,11 +1002,35 @@
             <th>✏️ Practice</th>
             <th>🚪 Exit</th>
             <th>Total</th>
+            <th style="width:48px;"></th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
     `;
+  }
+
+  // ── Delete Student ─────────────────────────────────────────
+  async function confirmDeleteStudent(name) {
+    const clsDisplay = TEACHER_CLASS_META[activeTeacherClass].display;
+    const ok = window.confirm(
+      `Remove "${name}" from ${clsDisplay}?\n\nThis deletes all their grades for this class and cannot be undone.`
+    );
+    if (!ok) return;
+
+    showToast(`Deleting ${name}…`);
+
+    // Remove from Firestore (live grades listener will refresh the table)
+    if (typeof deleteStudentFromFirebase === 'function') {
+      await deleteStudentFromFirebase(name, activeTeacherClass);
+    }
+
+    // Also remove from localStorage backup
+    if (typeof deleteStudentGrades === 'function') {
+      deleteStudentGrades(name, activeTeacherClass);
+    }
+
+    showToast(`${name} removed from ${clsDisplay}.`);
   }
 
   // ── CSV Export ─────────────────────────────────────────────

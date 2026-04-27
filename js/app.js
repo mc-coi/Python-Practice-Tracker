@@ -234,6 +234,37 @@ function renderSetupScreen(activeDay) {
     </div>
   ` : '';
 
+  const googleSignInBlock = firebaseEnabled ? `
+    <div style="display:flex; align-items:center; gap:10px; max-width:340px; margin:0 auto;">
+      <div style="flex:1; height:1px; background:var(--gray-200);"></div>
+      <span style="font-size:0.78rem; color:var(--gray-400); white-space:nowrap;">or sign in with</span>
+      <div style="flex:1; height:1px; background:var(--gray-200);"></div>
+    </div>
+    <div style="max-width:340px; margin:0 auto;">
+      <button id="google-signin-btn"
+              style="width:100%; display:flex; align-items:center; justify-content:center;
+                     gap:10px; padding:11px 20px; border:2px solid var(--gray-200);
+                     border-radius:10px; background:white; font-size:0.92rem;
+                     font-weight:600; font-family:var(--font); cursor:pointer;
+                     transition:border-color .2s, box-shadow .2s; color:var(--gray-700);"
+              onmouseover="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-light)'"
+              onmouseout="this.style.borderColor='var(--gray-200)'; this.style.boxShadow='none'"
+              onclick="handleGoogleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          <path fill="none" d="M0 0h48v48H0z"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <p style="text-align:center; font-size:0.72rem; color:var(--gray-300); margin-top:6px;">
+        Only your name is used — you won't stay logged in
+      </p>
+    </div>
+  ` : '';
+
   app.innerHTML = `
     <div class="setup-screen">
       <div class="card setup-card">
@@ -249,16 +280,18 @@ function renderSetupScreen(activeDay) {
 
           ${activeDayBlock}
 
-          <div style="max-width:340px; margin:0 auto; display:flex; flex-direction:column; gap:16px;">
-            <div class="form-group">
+          <div style="max-width:340px; margin:0 auto; display:flex; flex-direction:column; gap:14px;">
+            <div class="form-group" style="margin-bottom:0;">
               <label for="student-name-input">Your Name</label>
               <input type="text" id="student-name-input" placeholder="First Last" autocomplete="off" />
             </div>
             ${daySelectorBlock}
           </div>
 
+          ${googleSignInBlock}
+
           <button class="btn-primary" id="start-btn"
-                  style="max-width:340px; margin:24px auto 0;">
+                  style="max-width:340px; margin:20px auto 0;">
             Start Today's Activities
           </button>
 
@@ -291,6 +324,87 @@ function renderSetupScreen(activeDay) {
       startSession(day);
     });
   }
+}
+
+// ============================================================
+// Google Sign-In (name auto-fill)
+// ============================================================
+async function handleGoogleSignIn() {
+  const btn = document.getElementById('google-signin-btn');
+  if (!btn) return;
+
+  // Show loading state
+  btn.disabled = true;
+  btn.innerHTML = `
+    <span style="display:inline-block;width:16px;height:16px;border:2px solid var(--gray-300);
+                 border-top-color:var(--primary);border-radius:50%;
+                 animation:spin .7s linear infinite;"></span>
+    Signing in…
+  `;
+
+  if (typeof signInWithGoogleForName !== 'function') {
+    btn.disabled = false;
+    btn.innerHTML = 'Sign in with Google';
+    showToast('Google Sign-In is not available in local mode.');
+    return;
+  }
+
+  const result = await signInWithGoogleForName();
+
+  if (result.cancelled) {
+    // User closed the popup — restore button silently
+    btn.disabled = false;
+    btn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        <path fill="none" d="M0 0h48v48H0z"/>
+      </svg>
+      Sign in with Google
+    `;
+    return;
+  }
+
+  if (result.error) {
+    btn.disabled = false;
+    btn.innerHTML = 'Sign in with Google';
+    showToast('Google Sign-In failed: ' + result.error);
+    return;
+  }
+
+  // Success — pre-fill the name input
+  const nameInput = document.getElementById('student-name-input');
+  if (nameInput && result.name) {
+    nameInput.value = result.name;
+    nameInput.style.borderColor = 'var(--success)';
+    nameInput.style.background  = 'var(--success-light)';
+    // Reset styling after a moment
+    setTimeout(() => {
+      nameInput.style.borderColor = '';
+      nameInput.style.background  = '';
+    }, 2000);
+  }
+
+  // Replace Google button with a "signed in" confirmation badge
+  btn.outerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; padding:10px 16px;
+                border-radius:10px; background:var(--success-light);
+                border:2px solid var(--success); max-width:340px; margin:0 auto;">
+      <span style="font-size:1.1rem;">✓</span>
+      <span style="font-size:0.9rem; font-weight:600; color:#15803d;">
+        Name filled in from Google
+      </span>
+    </div>
+  `;
+
+  showToast(`Welcome, ${result.name}!`);
+  localStorage.setItem('cs_last_student', result.name);
+
+  // Focus the start button
+  const startBtn = document.getElementById('start-btn');
+  if (startBtn) startBtn.focus();
 }
 
 // ============================================================

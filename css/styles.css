@@ -1224,3 +1224,10 @@ body.class-videogame .form-group select:focus {
 }
 
 body.class-videogame .app-header h1 span { color: #059669; }
+
+/* ============================================================
+   UTILITY ANIMATIONS
+   ============================================================ */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
